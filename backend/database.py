@@ -42,11 +42,16 @@ N_PRIOR = 10
 # Backend selection
 # ---------------------------------------------------------------------------
 
-# Set DATABASE_URL in your environment to switch to Postgres.
-# On Vercel: Dashboard → your project → Settings → Environment Variables.
-# Vercel Postgres injects POSTGRES_URL automatically; either rename it to
-# DATABASE_URL or change the os.environ.get() key below to match.
-DATABASE_URL = os.environ.get("DATABASE_URL")
+# Detect Postgres connection string from several possible env var names:
+#   POSTGRES_URL_NON_POOLING — injected by Vercel Postgres Storage (preferred:
+#                               direct connection, avoids pgbouncer prepared-statement limits)
+#   POSTGRES_URL             — pooled variant, also injected by Vercel Postgres
+#   DATABASE_URL             — manually set fallback (Supabase, Neon, etc.)
+DATABASE_URL = (
+    os.environ.get("POSTGRES_URL_NON_POOLING") or
+    os.environ.get("POSTGRES_URL") or
+    os.environ.get("DATABASE_URL")
+)
 USE_POSTGRES  = bool(DATABASE_URL)
 
 # SQLite only — file path relative to this script.
