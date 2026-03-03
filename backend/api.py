@@ -138,7 +138,7 @@ def simulate(body: SimulateRequest):
             "cac":  s.reward_cac  if s.reward_cac  is not None else REWARD_THRESHOLDS["cac"],
         }
 
-    new_rows = run_full_simulation(
+    result = run_full_simulation(
         body.n_days,
         daily_budget      = s.daily_budget  if s else None,
         noise_sigma       = s.noise_sigma   if s else None,
@@ -146,12 +146,14 @@ def simulate(body: SimulateRequest):
         decay_factor      = s.decay_factor  if s else None,
     )
 
+    # current_day and bandit_states come from run_full_simulation's in-memory
+    # state — no extra DB round-trips needed after the simulation completes.
     return {
         "status":        "ok",
         "days_run":      body.n_days,
-        "current_day":   get_current_day(),
-        "new_rows":      new_rows,
-        "bandit_states": get_all_bandit_states(),
+        "current_day":   result["current_day"],
+        "new_rows":      result["rows"],
+        "bandit_states": result["bandit_states"],
     }
 
 

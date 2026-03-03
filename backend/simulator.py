@@ -226,7 +226,7 @@ def run_full_simulation(
     noise_sigma: float | None = None,
     reward_thresholds: dict | None = None,
     decay_factor: float | None = None,
-) -> list:
+) -> dict:
     """
     Run all three objectives (CTR, ROAS, CAC) for n_days.
 
@@ -244,6 +244,11 @@ def run_full_simulation(
         allowing the bandit to re-converge to the best channel.
       - Final state is written as absolute values because decay changes the
         base — incremental deltas would produce incorrect results.
+
+    Returns a dict with:
+      rows          — list of new row dicts (same as previous return value)
+      current_day   — final simulated day number (computed in-memory, no extra DB call)
+      bandit_states — list of {channel_id, objective, alpha, beta} dicts for the frontend
     """
     budget     = daily_budget     if daily_budget     is not None else DAILY_BUDGET
     sigma      = noise_sigma      if noise_sigma      is not None else NOISE_SIGMA
@@ -308,4 +313,16 @@ def run_full_simulation(
     # Age shocks — one DB write for the whole batch instead of n_days writes.
     decrement_shock_durations_by(n_days)
 
-    return all_rows
+    # Flatten live_states to a list so the simulate endpoint can return it
+    # without an extra get_all_bandit_states() DB call.
+    bandit_states_list = [
+        {"channel_id": ch_id, "objective": obj, "alpha": data["alpha"], "beta": data["beta"]}
+        for obj, channels in live_states.items()
+        for ch_id, data in channels.items()
+    ]
+
+    return {
+        "rows":          all_rows,
+        "current_day":   start_day + n_days - 1,
+        "bandit_states": bandit_states_list,
+    }

@@ -109,7 +109,7 @@ def _release(conn) -> None:
     """
     if not USE_POSTGRES:
         conn.commit()
-        _release(conn)
+        conn.close()
 
 
 def _exec(conn, sql, params=()):
@@ -239,42 +239,49 @@ def setup_database(channels: list) -> None:
     _exec(conn, _CREATE_BANDIT_STATE)
     _exec(conn, _CREATE_ACTIVE_SHOCKS)
 
-    # Upsert channel definitions. Syntax differs between backends:
-    #   SQLite:   INSERT OR REPLACE
-    #   Postgres: INSERT ... ON CONFLICT (id) DO UPDATE SET ...
-    for ch in channels:
-        if USE_POSTGRES:
-            _exec(conn, """
-                INSERT INTO channels (id, name, type, true_ctr, true_roas, true_cac)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO UPDATE SET
-                    name=EXCLUDED.name, type=EXCLUDED.type,
-                    true_ctr=EXCLUDED.true_ctr, true_roas=EXCLUDED.true_roas,
-                    true_cac=EXCLUDED.true_cac
-            """, (ch["id"], ch["name"], ch["type"], ch["true_ctr"], ch["true_roas"], ch["true_cac"]))
-        else:
-            _exec(conn, """
-                INSERT OR REPLACE INTO channels (id, name, type, true_ctr, true_roas, true_cac)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (ch["id"], ch["name"], ch["type"], ch["true_ctr"], ch["true_roas"], ch["true_cac"]))
+    # Build channel params once — used by both backends.
+    channel_params = [
+        (ch["id"], ch["name"], ch["type"], ch["true_ctr"], ch["true_roas"], ch["true_cac"])
+        for ch in channels
+    ]
 
-    # Seed bandit priors Beta(1, 1) — only if row doesn't already exist.
-    for ch in channels:
-        weight = STATIC_WEIGHTS.get(ch["id"], 1.0 / len(channels))
-        alpha_init = weight * N_PRIOR
-        beta_init  = (1.0 - weight) * N_PRIOR
-        for objective in ("ctr", "roas", "cac"):
-            if USE_POSTGRES:
-                _exec(conn, """
-                    INSERT INTO bandit_state (channel_id, objective, alpha, beta)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT DO NOTHING
-                """, (ch["id"], objective, alpha_init, beta_init))
-            else:
-                _exec(conn, """
-                    INSERT OR IGNORE INTO bandit_state (channel_id, objective, alpha, beta)
-                    VALUES (?, ?, ?, ?)
-                """, (ch["id"], objective, alpha_init, beta_init))
+    # Build bandit prior params — Beta(w*N, (1-w)*N) informed prior per channel per objective.
+    bandit_params = [
+        (ch["id"], obj,
+         STATIC_WEIGHTS.get(ch["id"], 1.0 / len(channels)) * N_PRIOR,
+         (1.0 - STATIC_WEIGHTS.get(ch["id"], 1.0 / len(channels))) * N_PRIOR)
+        for ch in channels
+        for obj in ("ctr", "roas", "cac")
+    ]
+
+    if USE_POSTGRES:
+        # execute_values sends ALL rows as one INSERT ... VALUES (r1),(r2),...
+        # — one round-trip instead of one per row. page_size > row count = single batch.
+        from psycopg2.extras import execute_values
+        cur = conn.cursor()
+        execute_values(cur, """
+            INSERT INTO channels (id, name, type, true_ctr, true_roas, true_cac)
+            VALUES %s
+            ON CONFLICT (id) DO UPDATE SET
+                name=EXCLUDED.name, type=EXCLUDED.type,
+                true_ctr=EXCLUDED.true_ctr, true_roas=EXCLUDED.true_roas,
+                true_cac=EXCLUDED.true_cac
+        """, channel_params, page_size=100)
+
+        execute_values(cur, """
+            INSERT INTO bandit_state (channel_id, objective, alpha, beta)
+            VALUES %s
+            ON CONFLICT DO NOTHING
+        """, bandit_params, page_size=100)
+    else:
+        conn.executemany("""
+            INSERT OR REPLACE INTO channels (id, name, type, true_ctr, true_roas, true_cac)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, channel_params)
+        conn.executemany("""
+            INSERT OR IGNORE INTO bandit_state (channel_id, objective, alpha, beta)
+            VALUES (?, ?, ?, ?)
+        """, bandit_params)
 
     _release(conn)
 
@@ -359,10 +366,16 @@ def batch_set_bandit_states(states: dict) -> None:
         return
     conn = _connect()
     if USE_POSTGRES:
-        _exec_many(conn, """
-            UPDATE bandit_state SET alpha = %s, beta = %s
-            WHERE channel_id = %s AND objective = %s
-        """, params)
+        # Single round-trip: UPDATE ... FROM (VALUES ...) joins all 18 rows at once.
+        # executemany would send 18 individual UPDATE statements = 18 round-trips.
+        from psycopg2.extras import execute_values
+        cur = conn.cursor()
+        execute_values(cur, """
+            UPDATE bandit_state SET alpha = v.alpha, beta = v.beta
+            FROM (VALUES %s) AS v(alpha, beta, channel_id, objective)
+            WHERE bandit_state.channel_id = v.channel_id::int
+              AND bandit_state.objective   = v.objective
+        """, params, page_size=100)
     else:
         _exec_many(conn, """
             UPDATE bandit_state SET alpha = ?, beta = ?
@@ -401,16 +414,19 @@ def insert_daily_results_batch(rows: list) -> None:
     conn = _connect()
 
     if USE_POSTGRES:
-        # psycopg2 uses %(name)s for named dict params (equivalent to SQLite's :name).
-        _exec_many(conn, """
+        # execute_values sends ALL rows as one INSERT ... VALUES (r1),(r2),...
+        # — one Postgres round-trip regardless of batch size.
+        # psycopg2's executemany() is NOT batched: it loops internally sending
+        # one round-trip per row, which for 1080 rows (30-day simulate) adds ~10s.
+        # page_size=2000 ensures even a 365-day batch fits in a single statement.
+        from psycopg2.extras import execute_values
+        cur = conn.cursor()
+        execute_values(cur, """
             INSERT INTO daily_results
               (day, channel_id, objective, allocator, budget_allocated,
                impressions, clicks, conversions, revenue,
                observed_ctr, observed_roas, observed_cac)
-            VALUES
-              (%(day)s, %(channel_id)s, %(objective)s, %(allocator)s, %(budget_allocated)s,
-               %(impressions)s, %(clicks)s, %(conversions)s, %(revenue)s,
-               %(observed_ctr)s, %(observed_roas)s, %(observed_cac)s)
+            VALUES %s
             ON CONFLICT (day, channel_id, objective, allocator)
             DO UPDATE SET
                 budget_allocated = EXCLUDED.budget_allocated,
@@ -421,7 +437,12 @@ def insert_daily_results_batch(rows: list) -> None:
                 observed_ctr     = EXCLUDED.observed_ctr,
                 observed_roas    = EXCLUDED.observed_roas,
                 observed_cac     = EXCLUDED.observed_cac
-        """, rows)
+        """, [
+            (r["day"], r["channel_id"], r["objective"], r["allocator"], r["budget_allocated"],
+             r["impressions"], r["clicks"], r["conversions"], r["revenue"],
+             r["observed_ctr"], r["observed_roas"], r["observed_cac"])
+            for r in rows
+        ], page_size=2000)
     else:
         # SQLite uses :name for named dict params.
         _exec_many(conn, """
@@ -579,24 +600,29 @@ def reset_simulation(channels: list) -> None:
     Priors are derived from STATIC_WEIGHTS so day-1 allocation matches static.
     Channel definitions are preserved. Shocks are cleared via clear_shocks().
     """
+    bandit_params = [
+        (ch["id"], obj,
+         STATIC_WEIGHTS.get(ch["id"], 1.0 / len(channels)) * N_PRIOR,
+         (1.0 - STATIC_WEIGHTS.get(ch["id"], 1.0 / len(channels))) * N_PRIOR)
+        for ch in channels
+        for obj in ("ctr", "roas", "cac")
+    ]
+
     conn = _connect()
     _exec(conn, "DELETE FROM daily_results")
     _exec(conn, "DELETE FROM bandit_state")
 
-    for ch in channels:
-        weight = STATIC_WEIGHTS.get(ch["id"], 1.0 / len(channels))
-        alpha_init = weight * N_PRIOR
-        beta_init  = (1.0 - weight) * N_PRIOR
-        for objective in ("ctr", "roas", "cac"):
-            if USE_POSTGRES:
-                _exec(conn, """
-                    INSERT INTO bandit_state (channel_id, objective, alpha, beta)
-                    VALUES (%s, %s, %s, %s)
-                """, (ch["id"], objective, alpha_init, beta_init))
-            else:
-                _exec(conn, """
-                    INSERT INTO bandit_state (channel_id, objective, alpha, beta)
-                    VALUES (?, ?, ?, ?)
-                """, (ch["id"], objective, alpha_init, beta_init))
+    if USE_POSTGRES:
+        from psycopg2.extras import execute_values
+        cur = conn.cursor()
+        execute_values(cur, """
+            INSERT INTO bandit_state (channel_id, objective, alpha, beta)
+            VALUES %s
+        """, bandit_params, page_size=100)
+    else:
+        conn.executemany("""
+            INSERT INTO bandit_state (channel_id, objective, alpha, beta)
+            VALUES (?, ?, ?, ?)
+        """, bandit_params)
 
     _release(conn)
