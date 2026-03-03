@@ -10,10 +10,12 @@ Inputs:  n_days (int), objective string
 Outputs: Inserts rows + updates bandit state; returns new row dicts
 
 Latency optimisations:
-  - active shocks are read ONCE per run_full_simulation call, not once per day
-  - bandit states written ONCE at the end as absolute values (batch_set_bandit_states)
-  - all result rows are collected and batch-inserted in ONE connection
-  - net: simulate(1) opens ~4 connections instead of ~25
+  - active shocks read ONCE per call (not per day)
+  - bandit states for all 3 objectives loaded in ONE query (get_bandit_states_all)
+  - all result rows batch-inserted in ONE connection
+  - bandit states written ONCE as absolute values (batch_set_bandit_states)
+  - shock aging done in ONE query (decrement_shock_durations_by(n))
+  - net: simulate(n) opens 6 DB connections flat, regardless of n
 
 Bayesian forgetting:
   - Alpha/beta are multiplied by DECAY_FACTOR each day before the next sample.
@@ -31,9 +33,9 @@ from bandit import sample_allocations
 from channels import CHANNELS, DAILY_BUDGET, NOISE_SIGMA, REWARD_THRESHOLDS, STATIC_WEIGHTS
 from database import (
     batch_set_bandit_states,
-    decrement_shock_durations,
+    decrement_shock_durations_by,
     get_active_shocks,
-    get_bandit_states,
+    get_bandit_states_all,
     get_current_day,
     insert_daily_results_batch,
 )
@@ -256,12 +258,10 @@ def run_full_simulation(
     # applies to the first 5 days, not all 30).
     active_shocks = get_active_shocks()
 
-    # Load bandit states once per objective upfront. Within the day loop we
-    # apply reward + decay in-memory so each day's allocation reflects what
-    # the bandit actually learned from the previous days in this batch.
-    # Without this, all n_days in a batch run use the same stale initial priors
-    # because the DB is only written once at the very end.
-    live_states = {obj: get_bandit_states(obj) for obj in ("ctr", "roas", "cac")}
+    # Load bandit states for ALL objectives in ONE DB round-trip.
+    # Within the day loop we apply reward + decay in-memory so each day's
+    # allocation reflects what the bandit learned from prior days in this batch.
+    live_states = get_bandit_states_all()
 
     all_rows: list = []
 
@@ -305,8 +305,7 @@ def run_full_simulation(
     # each day — summing raw deltas onto the initial DB values would ignore decay.
     batch_set_bandit_states(live_states)
 
-    # Age shocks — one DB write for n_days ticks.
-    for _ in range(n_days):
-        decrement_shock_durations()
+    # Age shocks — one DB write for the whole batch instead of n_days writes.
+    decrement_shock_durations_by(n_days)
 
     return all_rows

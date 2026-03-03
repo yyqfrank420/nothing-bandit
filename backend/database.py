@@ -268,6 +268,26 @@ def get_bandit_states(objective: str) -> dict:
     return {r["channel_id"]: {"alpha": r["alpha"], "beta": r["beta"]} for r in rows}
 
 
+def get_bandit_states_all() -> dict:
+    """
+    Return {objective: {channel_id: {alpha, beta}}} for ALL objectives in ONE connection.
+
+    Replaces three separate get_bandit_states() calls in run_full_simulation —
+    cuts DB round-trips from 3 to 1 per simulate call.
+    """
+    conn = _connect()
+    cur = _exec(conn, "SELECT channel_id, objective, alpha, beta FROM bandit_state")
+    rows = _fetchall(cur)
+    conn.close()
+    result: dict = {}
+    for r in rows:
+        obj = r["objective"]
+        if obj not in result:
+            result[obj] = {}
+        result[obj][r["channel_id"]] = {"alpha": r["alpha"], "beta": r["beta"]}
+    return result
+
+
 def batch_update_bandit_states(updates: list) -> None:
     """
     Batch-increment alpha/beta for multiple (channel_id, objective) pairs.
@@ -496,9 +516,28 @@ def get_active_shocks() -> list:
 
 
 def decrement_shock_durations() -> None:
-    """Subtract 1 from days_remaining for all active shocks. Called once per simulated day."""
+    """Subtract 1 from days_remaining for all active shocks. Single-day variant."""
     conn = _connect()
     _exec(conn, "UPDATE active_shocks SET days_remaining = days_remaining - 1")
+    conn.commit()
+    conn.close()
+
+
+def decrement_shock_durations_by(n: int) -> None:
+    """
+    Subtract n from days_remaining in ONE query instead of calling
+    decrement_shock_durations() n times in a loop.
+
+    Cuts simulate(30) from 30 DB writes down to 1 for shock aging —
+    the biggest single latency win for multi-day batch runs.
+    """
+    if n <= 0:
+        return
+    conn = _connect()
+    if USE_POSTGRES:
+        _exec(conn, "UPDATE active_shocks SET days_remaining = days_remaining - %s", (n,))
+    else:
+        _exec(conn, "UPDATE active_shocks SET days_remaining = days_remaining - ?", (n,))
     conn.commit()
     conn.close()
 
