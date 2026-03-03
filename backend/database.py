@@ -61,27 +61,55 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "bandit.db")
 # Connection helpers
 # ---------------------------------------------------------------------------
 
+# Module-level connection cache for Postgres.
+# Vercel Python runtimes reuse the same process for multiple requests
+# (typically for 5–10 minutes). By reusing one persistent connection we pay
+# the TCP + TLS + Postgres handshake cost once (~600ms London→Ohio), not once
+# per DB call. Subsequent queries within the same process run in ~5–10ms.
+#
+# Safety: _connect() checks conn.closed and conn.status before reusing.
+# If the connection is dead (e.g. Neon killed it after inactivity), a fresh
+# one is opened transparently. SQLite is always opened fresh (cheap local file).
+_pg_conn = None
+
+
 def _connect():
     """
-    Open a database connection for the active backend.
+    Return a database connection for the active backend.
 
-    SQLite:   returns sqlite3.Connection with Row factory (dict-style access).
-    Postgres: returns psycopg2 connection with RealDictCursor (also dict-style).
-
-    Both connections work with conn.commit() and conn.close().
+    Postgres: returns (or creates) the module-level cached connection.
+    SQLite:   opens a fresh connection per call (file I/O, no handshake cost).
     """
+    global _pg_conn
     if USE_POSTGRES:
         import psycopg2
         import psycopg2.extras
-        conn = psycopg2.connect(DATABASE_URL)
-        # RealDictCursor makes fetchall() / fetchone() return plain dicts —
-        # same behaviour as sqlite3.Row after dict(row).
-        conn.cursor_factory = psycopg2.extras.RealDictCursor
-        return conn
+        # Reuse if open and not in a broken state (status 0 = CONNECTION_OK).
+        if _pg_conn is not None and not _pg_conn.closed and _pg_conn.status == 0:
+            return _pg_conn
+        _pg_conn = psycopg2.connect(DATABASE_URL)
+        _pg_conn.cursor_factory = psycopg2.extras.RealDictCursor
+        # autocommit=True: each statement commits immediately, no manual
+        # conn.commit() calls needed, and reads don't leave hanging transactions.
+        _pg_conn.autocommit = True
+        return _pg_conn
     else:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         return conn
+
+
+def _release(conn) -> None:
+    """
+    Release a connection after use.
+
+    Postgres: no-op — autocommit is enabled so writes committed immediately,
+              and the connection stays open in the module-level cache.
+    SQLite:   commit and close (fresh connection per call, cheap to reopen).
+    """
+    if not USE_POSTGRES:
+        conn.commit()
+        _release(conn)
 
 
 def _exec(conn, sql, params=()):
@@ -248,8 +276,7 @@ def setup_database(channels: list) -> None:
                     VALUES (?, ?, ?, ?)
                 """, (ch["id"], objective, alpha_init, beta_init))
 
-    conn.commit()
-    conn.close()
+    _release(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +291,7 @@ def get_bandit_states(objective: str) -> dict:
     else:
         cur = _exec(conn, "SELECT channel_id, alpha, beta FROM bandit_state WHERE objective = ?", (objective,))
     rows = _fetchall(cur)
-    conn.close()
+    _release(conn)
     return {r["channel_id"]: {"alpha": r["alpha"], "beta": r["beta"]} for r in rows}
 
 
@@ -278,7 +305,7 @@ def get_bandit_states_all() -> dict:
     conn = _connect()
     cur = _exec(conn, "SELECT channel_id, objective, alpha, beta FROM bandit_state")
     rows = _fetchall(cur)
-    conn.close()
+    _release(conn)
     result: dict = {}
     for r in rows:
         obj = r["objective"]
@@ -310,8 +337,7 @@ def batch_update_bandit_states(updates: list) -> None:
             SET alpha = alpha + ?, beta = beta + ?
             WHERE channel_id = ? AND objective = ?
         """, [(a_d, b_d, ch_id, obj) for ch_id, obj, a_d, b_d in updates])
-    conn.commit()
-    conn.close()
+    _release(conn)
 
 
 def batch_set_bandit_states(states: dict) -> None:
@@ -342,8 +368,7 @@ def batch_set_bandit_states(states: dict) -> None:
             UPDATE bandit_state SET alpha = ?, beta = ?
             WHERE channel_id = ? AND objective = ?
         """, params)
-    conn.commit()
-    conn.close()
+    _release(conn)
 
 
 def update_bandit_state(channel_id: int, objective: str, alpha_delta: float, beta_delta: float) -> None:
@@ -359,8 +384,7 @@ def update_bandit_state(channel_id: int, objective: str, alpha_delta: float, bet
             UPDATE bandit_state SET alpha = alpha + ? , beta = beta + ?
             WHERE channel_id = ? AND objective = ?
         """, (alpha_delta, beta_delta, channel_id, objective))
-    conn.commit()
-    conn.close()
+    _release(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -411,8 +435,7 @@ def insert_daily_results_batch(rows: list) -> None:
                :observed_ctr, :observed_roas, :observed_cac)
         """, rows)
 
-    conn.commit()
-    conn.close()
+    _release(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +447,7 @@ def get_current_day() -> int:
     conn = _connect()
     cur = _exec(conn, "SELECT MAX(day) AS max_day FROM daily_results")
     row = _fetchone(cur)
-    conn.close()
+    _release(conn)
     return row["max_day"] if row and row["max_day"] is not None else 0
 
 
@@ -433,7 +456,7 @@ def get_all_results() -> list:
     conn = _connect()
     cur = _exec(conn, "SELECT * FROM daily_results ORDER BY day, objective, allocator, channel_id")
     rows = _fetchall(cur)
-    conn.close()
+    _release(conn)
     return rows
 
 
@@ -442,7 +465,7 @@ def get_all_bandit_states() -> list:
     conn = _connect()
     cur = _exec(conn, "SELECT * FROM bandit_state ORDER BY objective, channel_id")
     rows = _fetchall(cur)
-    conn.close()
+    _release(conn)
     return rows
 
 
@@ -481,8 +504,7 @@ def insert_shock(
         """, (name, description, json.dumps(affected_channel_ids), json.dumps(multipliers), duration, triggered_on_day))
         new_id = cur.lastrowid
 
-    conn.commit()
-    conn.close()
+    _release(conn)
     return new_id
 
 
@@ -495,7 +517,7 @@ def get_triggered_shock_names() -> set:
     conn = _connect()
     cur  = _exec(conn, "SELECT name FROM active_shocks")
     rows = _fetchall(cur)
-    conn.close()
+    _release(conn)
     return {r["name"] for r in rows}
 
 
@@ -507,7 +529,7 @@ def get_active_shocks() -> list:
     else:
         cur = _exec(conn, "SELECT * FROM active_shocks WHERE days_remaining > 0")
     rows = _fetchall(cur)
-    conn.close()
+    _release(conn)
 
     for row in rows:
         row["affected_channel_ids"] = json.loads(row["affected_channel_ids"])
@@ -519,8 +541,7 @@ def decrement_shock_durations() -> None:
     """Subtract 1 from days_remaining for all active shocks. Single-day variant."""
     conn = _connect()
     _exec(conn, "UPDATE active_shocks SET days_remaining = days_remaining - 1")
-    conn.commit()
-    conn.close()
+    _release(conn)
 
 
 def decrement_shock_durations_by(n: int) -> None:
@@ -538,16 +559,14 @@ def decrement_shock_durations_by(n: int) -> None:
         _exec(conn, "UPDATE active_shocks SET days_remaining = days_remaining - %s", (n,))
     else:
         _exec(conn, "UPDATE active_shocks SET days_remaining = days_remaining - ?", (n,))
-    conn.commit()
-    conn.close()
+    _release(conn)
 
 
 def clear_shocks() -> None:
     """Delete all shock rows. Called on full reset."""
     conn = _connect()
     _exec(conn, "DELETE FROM active_shocks")
-    conn.commit()
-    conn.close()
+    _release(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -580,5 +599,4 @@ def reset_simulation(channels: list) -> None:
                     VALUES (?, ?, ?, ?)
                 """, (ch["id"], objective, alpha_init, beta_init))
 
-    conn.commit()
-    conn.close()
+    _release(conn)
