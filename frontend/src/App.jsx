@@ -403,9 +403,6 @@ export default function App() {
   const autoIntervalRef   = useRef(null);
   const sequentialRunning = useRef(false);  // true while +1Wk / +1Mo sequential loop is running
   const loadingRef        = useRef(false);
-  // Pre-fetched next auto-batch. { promise, startsAtDay } — lets us pipeline the
-  // next simulate() call during the current batch's replay to eliminate inter-batch pauses.
-  const prefetchRef       = useRef(null);
   const currentDayRef     = useRef(0);
   const viewDayRef        = useRef(0);      // ref so slider onChange can read it without stale closure
 
@@ -459,14 +456,16 @@ export default function App() {
     }
   }, [currentDay, autoRunning]);
 
-  // Auto-mode fetcher — batches AUTO_BATCH days per API call, then replays them
-  // client-side at autoIntervalMs per day. Pre-fetches the next batch during replay
-  // so there is no pause between batches: by the time the replay ends, the next
-  // batch's API response is already waiting.
+  // Auto-mode fetcher — batches AUTO_BATCH days per API call to amortise Vercel's
+  // per-request overhead, then replays them client-side at autoIntervalMs per day.
   //
-  // Why this works: simulate() writes all rows to DB before returning, so the next
-  // call correctly reads get_current_day() + 1 from DB the moment we start pre-fetching.
-  // startsAtDay validates the pre-fetch is still usable if the user stops then restarts.
+  // No pre-fetching: simulate() commits to DB before returning, so any in-flight
+  // pre-fetch that gets abandoned (user stops, clicks +1D, etc.) leaves the DB
+  // ahead of the frontend with no safe recovery path. The 0–700ms inter-batch
+  // pause is the right trade-off vs state desync bugs.
+  //
+  // Stop behaviour: drain remaining batch days instantly (no sleep) so the frontend
+  // always ends in sync with what the backend committed.
   const AUTO_BATCH = 7;
   const fetchAndMerge = useCallback(async () => {
     if (loadingRef.current) return;
@@ -474,26 +473,8 @@ export default function App() {
     const batch = Math.min(AUTO_BATCH, MAX_DAYS - currentDayRef.current);
     if (batch <= 0) { loadingRef.current = false; return; }
     try {
-      // Use pre-fetched response if it's for the right starting day, else fetch fresh.
-      const expectedStart = currentDayRef.current + 1;
-      const pf = prefetchRef.current;
-      prefetchRef.current = null;
-      const response = (pf && pf.startsAtDay === expectedStart)
-        ? await pf.promise
-        : await simulate(batch, settingsRef.current);
+      const response = await simulate(batch, settingsRef.current);
 
-      // Immediately kick off the next batch in the background while we replay.
-      // This runs concurrently with the replay loop — no await here.
-      const nextDaysLeft = MAX_DAYS - response.current_day;
-      if (autoIntervalRef.current && nextDaysLeft > 0) {
-        const nextBatch = Math.min(AUTO_BATCH, nextDaysLeft);
-        prefetchRef.current = {
-          promise:     simulate(nextBatch, settingsRef.current),
-          startsAtDay: response.current_day + 1,
-        };
-      }
-
-      // Group rows by day for client-side replay.
       const byDay = new Map();
       response.new_rows.forEach((r) => {
         if (!byDay.has(r.day)) byDay.set(r.day, []);
@@ -502,9 +483,6 @@ export default function App() {
       const days = Array.from(byDay.keys()).sort((a, b) => a - b);
       setBanditStates(response.bandit_states);
 
-      // Replay each day. If stopped mid-batch, skip the sleep and drain remaining
-      // days instantly — keeps frontend in sync with what the backend already committed.
-      // React 18 batches the synchronous state updates into a single re-render.
       for (let i = 0; i < days.length; i++) {
         const day = days[i];
         setResults((prev) => [...prev, ...byDay.get(day)]);
@@ -512,6 +490,7 @@ export default function App() {
         currentDayRef.current = day;
         setViewDay(day);
         viewDayRef.current = day;
+        // Skip sleep if stopped — drain remaining days instantly to stay in sync with DB.
         if (i < days.length - 1 && autoIntervalRef.current) {
           await new Promise((r) => setTimeout(r, settingsRef.current.autoIntervalMs));
         }
@@ -582,9 +561,6 @@ export default function App() {
   // stopAuto is defined before startAuto so startAuto's closure can reference it.
   const stopAuto = useCallback(() => {
     setAutoRunning(false);
-    // Do NOT null prefetchRef here — the in-flight simulate() already committed
-    // those days to DB, and the startsAtDay check will validate reuse on restart.
-    // Only handleReset() clears it (DB wipe makes the prefetch data invalid).
     if (autoIntervalRef.current) {
       clearInterval(autoIntervalRef.current);
       autoIntervalRef.current = null;
@@ -637,7 +613,6 @@ export default function App() {
 
   const handleReset = async () => {
     stopAuto();
-    prefetchRef.current = null;  // stopAuto clears it, but belt-and-suspenders for direct calls
     setIsLoading(true);
     try {
       await reset();
