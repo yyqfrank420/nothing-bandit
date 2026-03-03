@@ -456,45 +456,19 @@ export default function App() {
     }
   }, [currentDay, autoRunning]);
 
-  // Auto-mode fetcher — batches AUTO_BATCH days per API call to amortise Vercel's
-  // per-request overhead, then replays them client-side at autoIntervalMs per day.
-  //
-  // No pre-fetching: simulate() commits to DB before returning, so any in-flight
-  // pre-fetch that gets abandoned (user stops, clicks +1D, etc.) leaves the DB
-  // ahead of the frontend with no safe recovery path. The 0–700ms inter-batch
-  // pause is the right trade-off vs state desync bugs.
-  //
-  // Stop behaviour: drain remaining batch days instantly (no sleep) so the frontend
-  // always ends in sync with what the backend committed.
-  const AUTO_BATCH = 7;
+  // Auto-mode fetcher — one API call per tick, no loading overlay.
+  // Reads settings via ref so the closure is always fresh without needing re-creation.
   const fetchAndMerge = useCallback(async () => {
     if (loadingRef.current) return;
     loadingRef.current = true;
-    const batch = Math.min(AUTO_BATCH, MAX_DAYS - currentDayRef.current);
-    if (batch <= 0) { loadingRef.current = false; return; }
     try {
-      const response = await simulate(batch, settingsRef.current);
-
-      const byDay = new Map();
-      response.new_rows.forEach((r) => {
-        if (!byDay.has(r.day)) byDay.set(r.day, []);
-        byDay.get(r.day).push(r);
-      });
-      const days = Array.from(byDay.keys()).sort((a, b) => a - b);
+      const response = await simulate(1, settingsRef.current);
+      setResults((prev) => [...prev, ...response.new_rows]);
       setBanditStates(response.bandit_states);
-
-      for (let i = 0; i < days.length; i++) {
-        const day = days[i];
-        setResults((prev) => [...prev, ...byDay.get(day)]);
-        setCurrentDay(day);
-        currentDayRef.current = day;
-        setViewDay(day);
-        viewDayRef.current = day;
-        // Skip sleep if stopped — drain remaining days instantly to stay in sync with DB.
-        if (i < days.length - 1 && autoIntervalRef.current) {
-          await new Promise((r) => setTimeout(r, settingsRef.current.autoIntervalMs));
-        }
-      }
+      setCurrentDay(response.current_day);
+      currentDayRef.current = response.current_day;
+      setViewDay(response.current_day);
+      viewDayRef.current = response.current_day;
     } catch (e) {
       setError(e.message);
       setAutoRunning(false);
