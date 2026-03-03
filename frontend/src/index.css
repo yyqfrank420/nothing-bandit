@@ -1,0 +1,223 @@
+/* ============================================================
+   File: index.css
+   Language: CSS
+   Purpose: Global styles and Nothing brand theme for the bandit dashboard.
+            Defines fonts, colour variables, resets, and shared utility classes.
+   Connects to: main.jsx (imported once at app root)
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   Nothing brand fonts — loaded from GitHub raw CDN (community-preserved)
+   Ndot-55      : dot-matrix display face → KPI numbers, day counter, chart titles
+   LetteraMonoLL: body monospace → labels, descriptions, tooltips
+   ============================================================ */
+
+@font-face {
+  font-family: "Ndot55";
+  src: url("https://raw.githubusercontent.com/xeji01/nothingfont/main/fonts/Ndot55-Regular.otf")
+    format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LetteraMonoLL";
+  src: url("https://raw.githubusercontent.com/xeji01/nothingfont/main/fonts/LetteraMonoLL-Regular.otf")
+    format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LetteraMonoLL";
+  src: url("https://raw.githubusercontent.com/xeji01/nothingfont/main/fonts/LetteraMonoLL-Light.otf")
+    format("opentype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "NType82";
+  src: url("https://raw.githubusercontent.com/xeji01/nothingfont/main/fonts/NType82-Regular.otf")
+    format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ------------------------------------------------------------
+   Nothing colour palette
+   ============================================================ */
+:root {
+  /* Core surfaces */
+  --color-bg:        #0D0D0D;
+  --color-surface:   #141414;
+  --color-surface-2: #1A1A1A;
+  --color-border:    #282828;
+  --color-border-2:  #333333;
+
+  /* Text */
+  --color-text:      #F0F0F0;
+  --color-text-2:    #A0A0A0;
+  --color-muted:     #666666;
+
+  /* Brand accent */
+  --color-accent:    #FF0000;
+  --color-accent-dim: rgba(255, 0, 0, 0.12);
+
+  /* Channel colours — carefully chosen for legibility on dark bg */
+  --ch-1: #4ECDC4;   /* Tech KOL       — teal */
+  --ch-2: #A78BFA;   /* Design KOL     — violet */
+  --ch-3: #F97316;   /* Generic KOL    — orange */
+  --ch-4: #E879A0;   /* Instagram Ads  — pink */
+  --ch-5: #22D3EE;   /* TikTok Ads     — cyan */
+  --ch-6: #4ADE80;   /* Google Search  — green */
+
+  /* Static allocator line colour */
+  --color-static:    #505050;
+
+  /* Spacing */
+  --gap-xs: 6px;
+  --gap-sm: 12px;
+  --gap-md: 20px;
+  --gap-lg: 32px;
+  --gap-xl: 48px;
+
+  /* Animation */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration: 300ms;
+}
+
+/* ------------------------------------------------------------
+   Global reset
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: "LetteraMonoLL", "Space Mono", "Courier New", monospace;
+  font-weight: 400;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ------------------------------------------------------------
+   Typography helpers
+   ============================================================ */
+.font-display {
+  font-family: "Ndot55", monospace;
+  letter-spacing: 0.04em;
+}
+
+.font-heading {
+  font-family: "NType82", "LetteraMonoLL", monospace;
+  letter-spacing: 0.02em;
+}
+
+.font-mono {
+  font-family: "LetteraMonoLL", "Space Mono", monospace;
+}
+
+/* ------------------------------------------------------------
+   Scrollbar
+   ============================================================ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--color-bg); }
+::-webkit-scrollbar-thumb { background: var(--color-border-2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+
+/* ------------------------------------------------------------
+   SVG chart defaults — prevents invisible text on dark bg
+   ============================================================ */
+svg text {
+  font-family: "LetteraMonoLL", "Space Mono", monospace;
+  fill: var(--color-text-2);
+}
+
+/* ------------------------------------------------------------
+   Selection
+   ============================================================ */
+::selection {
+  background: var(--color-accent-dim);
+  color: var(--color-text);
+}
+
+/* ------------------------------------------------------------
+   Scanline overlay — subtle CRT texture on the background.
+   Applied to the body via a pseudo-element.
+   The repeating-linear-gradient creates horizontal lines at 4px intervals.
+   Pointer-events: none so it doesn't block clicks.
+   ============================================================ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.06) 3px,
+    rgba(0, 0, 0, 0.06) 4px
+  );
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------
+   Shared chart card hover glow
+   ============================================================ */
+.chart-card {
+  transition: border-color 300ms var(--ease-out), box-shadow 300ms var(--ease-out);
+}
+.chart-card:hover {
+  border-color: #333;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.03);
+}
+
+/* ------------------------------------------------------------
+   KPI value counter — number updates slide in from bottom
+   ============================================================ */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.kpi-value-updated {
+  animation: slideUp 250ms var(--ease-out);
+}
+
+/* ------------------------------------------------------------
+   Shock event pulse ring
+   ============================================================ */
+@keyframes shockRing {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ------------------------------------------------------------
+   Auto mode progress bar shimmer
+   ============================================================ */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* ------------------------------------------------------------
+   Chart tooltip fade
+   ============================================================ */
+.chart-tooltip {
+  transition: opacity 120ms ease;
+}
