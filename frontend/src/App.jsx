@@ -502,10 +502,10 @@ export default function App() {
       const days = Array.from(byDay.keys()).sort((a, b) => a - b);
       setBanditStates(response.bandit_states);
 
-      // Replay each day at autoIntervalMs. Check autoIntervalRef each iteration so
-      // the loop exits cleanly if the user clicks Stop mid-batch.
+      // Replay always runs to completion — breaking early would leave the backend
+      // (which already committed this batch) ahead of the frontend state.
+      // stopAuto() prevents the NEXT batch by clearing the interval + prefetch.
       for (let i = 0; i < days.length; i++) {
-        if (!autoIntervalRef.current) break;
         const day = days[i];
         setResults((prev) => [...prev, ...byDay.get(day)]);
         setCurrentDay(day);
