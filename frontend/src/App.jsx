@@ -403,6 +403,9 @@ export default function App() {
   const autoIntervalRef   = useRef(null);
   const sequentialRunning = useRef(false);  // true while +1Wk / +1Mo sequential loop is running
   const loadingRef        = useRef(false);
+  // Pre-fetched next auto-batch. { promise, startsAtDay } — lets us pipeline the
+  // next simulate() call during the current batch's replay to eliminate inter-batch pauses.
+  const prefetchRef       = useRef(null);
   const currentDayRef     = useRef(0);
   const viewDayRef        = useRef(0);      // ref so slider onChange can read it without stale closure
 
@@ -456,12 +459,14 @@ export default function App() {
     }
   }, [currentDay, autoRunning]);
 
-  // Auto-mode fetcher — batches AUTO_BATCH days per API call to amortise Vercel's
-  // per-request overhead (function initialisation + Postgres round-trips).
-  // On local (SQLite, no network) this is imperceptible. On Vercel (Postgres, cold
-  // function), calling simulate(1) per tick meant paying full overhead every day;
-  // simulate(7) pays it once per 7 days, then replays days client-side at the same
-  // visual tick speed. The setInterval fires as before; loadingRef prevents overlaps.
+  // Auto-mode fetcher — batches AUTO_BATCH days per API call, then replays them
+  // client-side at autoIntervalMs per day. Pre-fetches the next batch during replay
+  // so there is no pause between batches: by the time the replay ends, the next
+  // batch's API response is already waiting.
+  //
+  // Why this works: simulate() writes all rows to DB before returning, so the next
+  // call correctly reads get_current_day() + 1 from DB the moment we start pre-fetching.
+  // startsAtDay validates the pre-fetch is still usable if the user stops then restarts.
   const AUTO_BATCH = 7;
   const fetchAndMerge = useCallback(async () => {
     if (loadingRef.current) return;
@@ -469,7 +474,25 @@ export default function App() {
     const batch = Math.min(AUTO_BATCH, MAX_DAYS - currentDayRef.current);
     if (batch <= 0) { loadingRef.current = false; return; }
     try {
-      const response = await simulate(batch, settingsRef.current);
+      // Use pre-fetched response if it's for the right starting day, else fetch fresh.
+      const expectedStart = currentDayRef.current + 1;
+      const pf = prefetchRef.current;
+      prefetchRef.current = null;
+      const response = (pf && pf.startsAtDay === expectedStart)
+        ? await pf.promise
+        : await simulate(batch, settingsRef.current);
+
+      // Immediately kick off the next batch in the background while we replay.
+      // This runs concurrently with the replay loop — no await here.
+      const nextDaysLeft = MAX_DAYS - response.current_day;
+      if (autoIntervalRef.current && nextDaysLeft > 0) {
+        const nextBatch = Math.min(AUTO_BATCH, nextDaysLeft);
+        prefetchRef.current = {
+          promise:     simulate(nextBatch, settingsRef.current),
+          startsAtDay: response.current_day + 1,
+        };
+      }
+
       // Group rows by day for client-side replay.
       const byDay = new Map();
       response.new_rows.forEach((r) => {
@@ -478,6 +501,7 @@ export default function App() {
       });
       const days = Array.from(byDay.keys()).sort((a, b) => a - b);
       setBanditStates(response.bandit_states);
+
       // Replay each day at autoIntervalMs. Check autoIntervalRef each iteration so
       // the loop exits cleanly if the user clicks Stop mid-batch.
       for (let i = 0; i < days.length; i++) {
@@ -558,6 +582,7 @@ export default function App() {
   // stopAuto is defined before startAuto so startAuto's closure can reference it.
   const stopAuto = useCallback(() => {
     setAutoRunning(false);
+    prefetchRef.current = null;  // discard any in-flight pre-fetch — stale after stop
     if (autoIntervalRef.current) {
       clearInterval(autoIntervalRef.current);
       autoIntervalRef.current = null;
@@ -610,6 +635,7 @@ export default function App() {
 
   const handleReset = async () => {
     stopAuto();
+    prefetchRef.current = null;  // stopAuto clears it, but belt-and-suspenders for direct calls
     setIsLoading(true);
     try {
       await reset();
