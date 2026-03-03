@@ -5,6 +5,10 @@
   "outputDirectory": "frontend/dist",
   "framework": null,
 
+  "fluid": true,
+
+  "regions": ["iad1"],
+
   "rewrites": [
     {
       "source": "/api/:path*",

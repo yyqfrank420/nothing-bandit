@@ -456,19 +456,42 @@ export default function App() {
     }
   }, [currentDay, autoRunning]);
 
-  // Auto-mode fetcher — one API call per tick, no loading overlay (auto has its own indicators).
-  // Reads settings via ref so the closure is always fresh without needing re-creation.
+  // Auto-mode fetcher — batches AUTO_BATCH days per API call to amortise Vercel's
+  // per-request overhead (function initialisation + Postgres round-trips).
+  // On local (SQLite, no network) this is imperceptible. On Vercel (Postgres, cold
+  // function), calling simulate(1) per tick meant paying full overhead every day;
+  // simulate(7) pays it once per 7 days, then replays days client-side at the same
+  // visual tick speed. The setInterval fires as before; loadingRef prevents overlaps.
+  const AUTO_BATCH = 7;
   const fetchAndMerge = useCallback(async () => {
     if (loadingRef.current) return;
     loadingRef.current = true;
+    const batch = Math.min(AUTO_BATCH, MAX_DAYS - currentDayRef.current);
+    if (batch <= 0) { loadingRef.current = false; return; }
     try {
-      const response = await simulate(1, settingsRef.current);
-      setResults((prev) => [...prev, ...response.new_rows]);
+      const response = await simulate(batch, settingsRef.current);
+      // Group rows by day for client-side replay.
+      const byDay = new Map();
+      response.new_rows.forEach((r) => {
+        if (!byDay.has(r.day)) byDay.set(r.day, []);
+        byDay.get(r.day).push(r);
+      });
+      const days = Array.from(byDay.keys()).sort((a, b) => a - b);
       setBanditStates(response.bandit_states);
-      setCurrentDay(response.current_day);
-      currentDayRef.current = response.current_day;
-      setViewDay(response.current_day);
-      viewDayRef.current = response.current_day;
+      // Replay each day at autoIntervalMs. Check autoIntervalRef each iteration so
+      // the loop exits cleanly if the user clicks Stop mid-batch.
+      for (let i = 0; i < days.length; i++) {
+        if (!autoIntervalRef.current) break;
+        const day = days[i];
+        setResults((prev) => [...prev, ...byDay.get(day)]);
+        setCurrentDay(day);
+        currentDayRef.current = day;
+        setViewDay(day);
+        viewDayRef.current = day;
+        if (i < days.length - 1) {
+          await new Promise((r) => setTimeout(r, settingsRef.current.autoIntervalMs));
+        }
+      }
     } catch (e) {
       setError(e.message);
       setAutoRunning(false);
