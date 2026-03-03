@@ -6,14 +6,15 @@
  *
  * Connects to: App.jsx
  * Inputs:
- *   onStart    — callback: enter dashboard at day 0 (no simulation)
- *   onSimulate — callback(nDays): simulate n days then enter dashboard
+ *   onStart      — callback: enter dashboard at day 0 (no tour)
+ *   onGetStarted — callback: enter dashboard at day 0 AND trigger guided tour
+ *   onSimulate   — callback(nDays): simulate n days then enter dashboard (no tour)
  * Outputs: Full-viewport React element
  */
 
 import React, { useEffect, useState } from "react";
 
-export default function LandingPage({ onStart, onSimulate }) {
+export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
   const [visible,  setVisible]  = useState(false);   // controls fade-in
   const [leaving,  setLeaving]  = useState(false);   // controls fade-out
   const [loading,  setLoading]  = useState(false);   // +1 Day in progress
@@ -145,9 +146,9 @@ export default function LandingPage({ onStart, onSimulate }) {
             gap:       "12px",
             animation: visible ? "landingFadeUp 600ms ease 500ms both" : "none",
           }}>
-            {/* Start — enter dashboard at day 0 */}
+            {/* Get Started — enter dashboard + trigger guided tour */}
             <button
-              onClick={() => dismiss(onStart)}
+              onClick={() => dismiss(onGetStarted)}
               disabled={loading}
               style={{
                 padding:       "12px 28px",
@@ -174,7 +175,7 @@ export default function LandingPage({ onStart, onSimulate }) {
                 e.currentTarget.style.color       = "#888";
               }}
             >
-              Start →
+              Get Started
             </button>
 
             {/* +1 Day — simulate one day then enter dashboard */}
@@ -222,7 +223,7 @@ export default function LandingPage({ onStart, onSimulate }) {
                   }} />
                   Simulating…
                 </>
-              ) : "+1 Day"}
+              ) : "+1 Day (skip tutorial)"}
             </button>
           </div>
         </div>

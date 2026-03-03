@@ -69,11 +69,23 @@ export async function getBanditStates() {
  * Combined initial-load fetch — returns results, bandit_states, active_shocks,
  * and current_day in one round-trip instead of three.
  * On serverless (Vercel), one call = one cold-start instead of three.
+ *
+ * 10-second AbortController timeout: if the backend port is open but unresponsive
+ * (hung uvicorn process, stale connection), fetch would otherwise hang for ~30s.
+ * 10s is generous enough to cover Vercel cold starts (typically 1–3s) while
+ * failing fast locally when the backend is simply not running.
+ *
  * @returns {Promise<{results, bandit_states, active_shocks, current_day}>}
  */
 export async function getState() {
-  const res = await fetch(`${BASE}/state`);
-  return checkResponse(res);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(`${BASE}/state`, { signal: controller.signal });
+    return checkResponse(res);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**

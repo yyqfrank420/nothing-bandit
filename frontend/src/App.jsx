@@ -26,6 +26,7 @@ import BusinessMetricsChart from "./components/BusinessMetricsChart.jsx";
 import SettingsPanel, { DEFAULT_SETTINGS } from "./components/SettingsPanel.jsx";
 import ShockImpactPanel from "./components/ShockImpactPanel.jsx";
 import LandingPage from "./components/LandingPage.jsx";
+import GuidedTour from "./components/GuidedTour.jsx";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -395,6 +396,8 @@ export default function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   // null = unknown (mount not yet complete); true = show landing; false = show dashboard.
   const [showLanding, setShowLanding] = useState(null);
+  // true = guided tour is active (triggered by "Get Started" on landing page).
+  const [tourActive, setTourActive] = useState(false);
   // Ref so auto interval always reads current settings without stale closure.
   const settingsRef = useRef(DEFAULT_SETTINGS);
   const autoIntervalRef   = useRef(null);
@@ -434,7 +437,12 @@ export default function App() {
           setActiveShock(enriched[enriched.length - 1]);  // show most recent
         }
       } catch (e) {
-        setError("Backend unreachable. Start uvicorn on port 8000.");
+        // AbortError = 10s timeout fired — backend is running but not responding.
+        // Everything else (TypeError "Failed to fetch") = backend is not running at all.
+        const msg = e.name === "AbortError"
+          ? "Backend not responding after 10s. Restart uvicorn on port 8000."
+          : "Backend unreachable. Start: cd backend && uvicorn api:app --reload --port 8000";
+        setError(msg);
         setShowLanding(false);  // don't block on error — show dashboard with error bar
       }
     }
@@ -615,12 +623,39 @@ export default function App() {
   // -------------------------------------------------------------------------
 
   // Landing page is shown on first load (day 0). After Reset it reappears.
-  // null = mount not yet complete — render nothing to avoid flash.
-  if (showLanding === null) return null;
+  // null = initial fetch in-flight. Show a loading screen so the user doesn't
+  // see a blank page while waiting for /api/state (hung backend = infinite blank).
+  if (showLanding === null) {
+    return (
+      <div style={{
+        position:       "fixed",
+        inset:          0,
+        background:     "#0D0D0D",
+        display:        "flex",
+        alignItems:     "center",
+        justifyContent: "center",
+      }}>
+        <style>{`
+          @keyframes nbPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%       { opacity: 0.35; transform: scale(1.5); }
+          }
+        `}</style>
+        <div style={{
+          width:        "10px",
+          height:       "10px",
+          borderRadius: "50%",
+          background:   "#FF0000",
+          animation:    "nbPulse 1.4s ease-in-out infinite",
+        }} />
+      </div>
+    );
+  }
   if (showLanding) {
     return (
       <LandingPage
         onStart={() => setShowLanding(false)}
+        onGetStarted={() => { setTourActive(true); setShowLanding(false); }}
         onSimulate={handleSimulate}
       />
     );
@@ -697,6 +732,9 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onReset={() => setSettings(DEFAULT_SETTINGS)}
       />
+
+      {/* Guided tour — triggered by "Get Started" on landing page */}
+      <GuidedTour show={tourActive} onDone={() => setTourActive(false)} />
 
       {/* Channel legend tooltip */}
       {channelTooltip && <ChannelTooltip {...channelTooltip} />}
@@ -876,7 +914,7 @@ export default function App() {
             </div>
 
             {/* Controls */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+            <div data-tour="controls" style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
               {/* Inline status — always occupies space so buttons don't shift on load/idle toggle */}
               <div style={{
                 display: "flex",
@@ -1100,6 +1138,21 @@ export default function App() {
               viewDay={viewDay}
             />
 
+            {/* Section label — data-tour anchors the spotlight to this slim element */}
+            <div
+              data-tour="allocation-grid"
+              style={{
+                fontSize: "10px",
+                color: "#555",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                marginBottom: "12px",
+                paddingLeft: "2px",
+              }}
+            >
+              Budget Allocation — 3 Objectives
+            </div>
+
             {/* 3-column grid — one column per objective */}
             <div style={{
               display: "grid",
@@ -1167,14 +1220,17 @@ export default function App() {
 
             {/* Business Outcomes — full width, with objective toggle */}
             <section style={{ marginBottom: "32px" }}>
-              <div style={{
-                fontSize: "10px",
-                color: "#555",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                marginBottom: "16px",
-                paddingLeft: "2px",
-              }}>
+              <div
+                data-tour="business-outcomes"
+                style={{
+                  fontSize: "10px",
+                  color: "#555",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  marginBottom: "16px",
+                  paddingLeft: "2px",
+                }}
+              >
                 Business Outcomes — Bandit vs Static Baseline
               </div>
               <BusinessMetricsChart

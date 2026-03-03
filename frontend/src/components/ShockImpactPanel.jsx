@@ -327,7 +327,8 @@ function ShockImpactCard({ shock, results, viewDay }) {
   const isActive    = viewDay >= shock.triggered_on_day && viewDay <= shock.endDay;
   const isPending   = viewDay < shock.triggered_on_day;
   const status      = isPending ? "PENDING" : isActive ? "ACTIVE" : "EXPIRED";
-  const statusColor = isActive ? "#22D3EE" : isPending ? "#888" : "#444";
+  // #F0F0F0 (near-white) for ACTIVE avoids clashing with TikTok Ads channel color (#22D3EE).
+  const statusColor = isActive ? "#F0F0F0" : isPending ? "#888" : "#444";
 
   // Pre-window: days before the shock used as baseline.
   const preStart   = Math.max(1, shock.triggered_on_day - PRE_WINDOW_DAYS);
@@ -398,6 +399,27 @@ function ShockImpactCard({ shock, results, viewDay }) {
           {shock.endDay - shock.triggered_on_day} days
         </div>
 
+        {/* Affected channels */}
+        {affectedIds.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+            <span style={{ color: "#444", fontSize: "8px", letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>
+              Affected:
+            </span>
+            {affectedIds.map(chId => (
+              <span key={chId} style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                <span style={{
+                  width: "5px", height: "5px", borderRadius: "50%",
+                  background: CHANNEL_COLORS[chId] ?? "#888",
+                  display: "inline-block", flexShrink: 0,
+                }} />
+                <span style={{ color: "#666", fontSize: "8px" }}>
+                  {CHANNEL_NAMES[chId] ?? `Ch${chId}`}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Multiplier pills */}
         {multiplierBadges.length > 0 && (
           <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
@@ -457,7 +479,7 @@ function ShockImpactCard({ shock, results, viewDay }) {
             marginTop: "4px",
           }}>
             {stats.filter(s => s.budDelta != null).map(({ chId, preBudDay, durBudDay, budDelta }) => {
-              const budColor = budDelta >= 0 ? "#555" : "#4ADE80";  // less budget = green (efficient)
+              const budColor = budDelta >= 0 ? "#4ADE80" : "#FF6666";  // + = green, - = red
               const sign     = budDelta >= 0 ? "+" : "";
               const fmt      = v => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(0)}`;
               return (
