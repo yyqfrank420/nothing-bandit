@@ -502,9 +502,9 @@ export default function App() {
       const days = Array.from(byDay.keys()).sort((a, b) => a - b);
       setBanditStates(response.bandit_states);
 
-      // Replay always runs to completion — breaking early would leave the backend
-      // (which already committed this batch) ahead of the frontend state.
-      // stopAuto() prevents the NEXT batch by clearing the interval + prefetch.
+      // Replay each day. If stopped mid-batch, skip the sleep and drain remaining
+      // days instantly — keeps frontend in sync with what the backend already committed.
+      // React 18 batches the synchronous state updates into a single re-render.
       for (let i = 0; i < days.length; i++) {
         const day = days[i];
         setResults((prev) => [...prev, ...byDay.get(day)]);
@@ -512,7 +512,7 @@ export default function App() {
         currentDayRef.current = day;
         setViewDay(day);
         viewDayRef.current = day;
-        if (i < days.length - 1) {
+        if (i < days.length - 1 && autoIntervalRef.current) {
           await new Promise((r) => setTimeout(r, settingsRef.current.autoIntervalMs));
         }
       }
@@ -582,7 +582,9 @@ export default function App() {
   // stopAuto is defined before startAuto so startAuto's closure can reference it.
   const stopAuto = useCallback(() => {
     setAutoRunning(false);
-    prefetchRef.current = null;  // discard any in-flight pre-fetch — stale after stop
+    // Do NOT null prefetchRef here — the in-flight simulate() already committed
+    // those days to DB, and the startsAtDay check will validate reuse on restart.
+    // Only handleReset() clears it (DB wipe makes the prefetch data invalid).
     if (autoIntervalRef.current) {
       clearInterval(autoIntervalRef.current);
       autoIntervalRef.current = null;
