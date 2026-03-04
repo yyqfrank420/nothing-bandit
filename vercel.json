@@ -7,7 +7,7 @@
 
   "fluid": true,
 
-  "regions": ["iad1"],
+  "regions": ["lhr1"],
 
   "rewrites": [
     {
