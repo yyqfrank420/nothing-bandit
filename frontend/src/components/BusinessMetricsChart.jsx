@@ -125,7 +125,7 @@ function useSeries(results, activeObjective) {
   }, [results, activeObjective]);
 }
 
-// Shown on day 0 — all values at zero with 0.0% vs static label.
+// Shown on day 0 — values at zero, prompts user to simulate.
 function ZeroKpiCard({ kpi }) {
   return (
     <div style={{
@@ -144,9 +144,9 @@ function ZeroKpiCard({ kpi }) {
       <div style={{ fontFamily: "Ndot55, monospace", fontSize: "22px", color: "#282828", lineHeight: 1 }}>
         {kpi.shortFmt(0)}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <span style={{ fontFamily: "Ndot55, monospace", fontSize: "13px", color: "#333" }}>0.0%</span>
-        <span style={{ fontSize: "10px", color: "#333" }}>vs static</span>
+      {/* Replaced "0.0% vs static" — avoids "is this broken?" reaction on day 0 */}
+      <div style={{ fontSize: "9px", color: "#333", fontStyle: "italic" }}>
+        simulate to populate
       </div>
     </div>
   );
@@ -474,7 +474,8 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
   );
 }
 
-// Toggle button for objective filter
+// Toggle button for objective filter.
+// Active tab uses red border + red-tinted bg so the selected state is unmistakable.
 function ObjTab({ label, active, onClick }) {
   return (
     <button
@@ -482,8 +483,8 @@ function ObjTab({ label, active, onClick }) {
       style={{
         padding: "5px 12px",
         borderRadius: "3px",
-        border: `1px solid ${active ? "#444" : "#222"}`,
-        background: active ? "#1E1E1E" : "transparent",
+        border: `1px solid ${active ? "var(--color-accent)" : "#222"}`,
+        background: active ? "var(--color-accent-tint)" : "transparent",
         color: active ? "#E0E0E0" : "#444",
         fontSize: "10px",
         letterSpacing: "0.07em",
@@ -536,15 +537,26 @@ export default function BusinessMetricsChart({ results, currentDay }) {
         flexWrap: "wrap",
         gap: "12px",
       }}>
-        <span style={{
-          fontSize: "10px",
-          color: "#444",
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          fontFamily: "LetteraMonoLL, monospace",
-        }}>
-          {OBJECTIVE_LABELS[activeObjective]}
-        </span>
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+          <span style={{
+            fontSize: "12px",
+            color: "#888",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            fontFamily: "LetteraMonoLL, monospace",
+          }}>
+            {OBJECTIVE_LABELS[activeObjective]}
+          </span>
+          {/* Sub-label confirms the tab click actually did something */}
+          <span style={{
+            fontSize: "9px",
+            color: "#555",
+            fontFamily: "LetteraMonoLL, monospace",
+            letterSpacing: "0.06em",
+          }}>
+            Filtering: {activeObjective === "all" ? "all objectives (avg)" : activeObjective.toUpperCase()}
+          </span>
+        </div>
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
           {["all", "ctr", "roas", "cac"].map((obj) => (
             <ObjTab
@@ -556,6 +568,25 @@ export default function BusinessMetricsChart({ results, currentDay }) {
           ))}
         </div>
       </div>
+
+      {/* CTR caveat — filtering by CTR shows click-optimised results, not revenue */}
+      {activeObjective === "ctr" && (
+        <div style={{
+          padding:     "8px 12px",
+          marginBottom: "16px",
+          borderLeft:  "2px solid #F97316",
+          background:  "rgba(249,115,22,0.04)",
+          fontSize:    "10px",
+          color:       "#888",
+          lineHeight:  "1.5",
+          fontFamily:  "LetteraMonoLL, monospace",
+          animation:   "fadeIn 300ms ease",
+        }}>
+          <span style={{ color: "#F97316" }}>⚠ You're viewing CTR-objective results.</span>{" "}
+          Maximising click-through rate can attract high-volume but low-quality traffic — wrong audience segments that don't convert.
+          {" "}<span style={{ color: "#555" }}>ROAS and CAC tabs show objectives that directly track revenue and acquisition efficiency.</span>
+        </div>
+      )}
 
       {/* Summary KPI cards — show zeroes on day 0 for realism */}
       <div style={{

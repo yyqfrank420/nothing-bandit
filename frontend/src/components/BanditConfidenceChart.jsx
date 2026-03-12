@@ -184,7 +184,7 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
       // The mode of Beta(α,β) = (α-1)/(α+β-2) for α,β > 1.
       const mode = alpha > 1 && beta > 1 ? (alpha - 1) / (alpha + beta - 2) : alpha / (alpha + beta);
 
-      // Mark the mode with a small vertical line
+      // Mode dashed line + "mode XX%" label above it
       if (alpha > 1) {
         g.append("line")
           .attr("x1", xScale(mode)).attr("x2", xScale(mode))
@@ -193,6 +193,16 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
           .attr("stroke-width", 1)
           .attr("stroke-dasharray", "2,3")
           .attr("opacity", 0.5);
+
+        // Label positioned just above the line — 3px right so it doesn't overlap
+        g.append("text")
+          .attr("x", xScale(mode) + 3)
+          .attr("y", 7)
+          .attr("fill", color)
+          .attr("font-size", "7px")
+          .attr("font-family", "LetteraMonoLL, monospace")
+          .attr("opacity", 0.7)
+          .text(`mode ${Math.round(mode * 100)}%`);
       }
     });
 

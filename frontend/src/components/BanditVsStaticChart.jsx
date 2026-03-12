@@ -143,17 +143,55 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
       .call((g) => g.select(".domain").remove())
       .call((g) => g.selectAll("line").attr("stroke", "#1A1A1A").attr("stroke-dasharray", "1,6"));
 
-    // Shock lines
+    // Tooltip — defined before shock events so shock hit-areas can reference it
+    const tooltip = d3.select("body").selectAll(".bvs-tooltip").data([null]).join("div")
+      .attr("class", "bvs-tooltip")
+      .style("position", "fixed")
+      .style("background", "#161616")
+      .style("border", "1px solid #2A2A2A")
+      .style("border-radius", "3px")
+      .style("padding", "8px 10px")
+      .style("font-size", "11px")
+      .style("font-family", "LetteraMonoLL, monospace")
+      .style("color", "#C0C0C0")
+      .style("pointer-events", "none")
+      .style("opacity", 0)
+      .style("z-index", 200)
+      .style("line-height", "1.8")
+      .style("transition", "opacity 80ms");
+
+    // Shock lines + transparent hit-areas for hover tooltips
     shockEvents.forEach((shock) => {
       const shockDay = shock.triggered_on_day ?? shock.day;
       if (shockDay > 0 && shockDay <= (currentDay || 183)) {
+        const sx = xScale(shockDay);
+
         g.append("line")
-          .attr("x1", xScale(shockDay)).attr("x2", xScale(shockDay))
+          .attr("x1", sx).attr("x2", sx)
           .attr("y1", 0).attr("y2", innerH)
-          .attr("stroke", "#FF0000")
+          // style() — not attr() — so CSS variable resolves correctly
+          .style("stroke", "var(--color-accent)")
           .attr("stroke-width", 1)
           .attr("stroke-dasharray", "3,4")
           .attr("opacity", 0.35);
+
+        // ±8px hit-area — full chart height
+        g.append("rect")
+          .attr("x", sx - 8).attr("y", 0)
+          .attr("width", 16).attr("height", innerH)
+          .attr("fill", "transparent")
+          .on("mouseenter", function (event) {
+            tooltip
+              .style("opacity", 1)
+              .style("left", `${event.clientX + 14}px`)
+              .style("top", `${event.clientY - 14}px`)
+              .html(
+                `<div style="color:#FF4444;font-size:9px;margin-bottom:5px;letter-spacing:0.1em">⚡ ${shock.name}</div>` +
+                `<div style="color:#C0C0C0;font-size:10px;margin-bottom:6px;max-width:200px;white-space:normal;line-height:1.5">${shock.description}</div>` +
+                `<div style="color:#555;font-size:9px">Day ${shockDay} · ${shock.duration_days ?? shock.days_remaining ?? "?"} days</div>`
+              );
+          })
+          .on("mouseleave", () => tooltip.style("opacity", 0));
       }
     });
 
@@ -225,15 +263,25 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         .text(label);
     }
 
-    // "↑ lower is better" note for CAC — prevents axis confusion
+    // CAC "lower is better" pill badge — replaces tiny illegible text.
+    // Uses --color-info (cyan) to distinguish from the brand red accent.
     if (isCAC) {
-      g.append("text")
-        .attr("x", 2)
-        .attr("y", -2)
-        .attr("fill", "#444")
+      const pillG = g.append("g").attr("transform", `translate(2, -${margin.top - 4})`);
+      pillG.append("rect")
+        .attr("x", 0).attr("y", 0)
+        .attr("width", 88).attr("height", 14)
+        .attr("rx", 3)
+        // style() so CSS variables resolve (SVG presentation attrs don't support var())
+        .style("fill", "var(--color-info-dim)")
+        .style("stroke", "var(--color-info)")
+        .attr("stroke-width", 0.5)
+        .attr("stroke-opacity", 0.5);
+      pillG.append("text")
+        .attr("x", 6).attr("y", 10)
+        .style("fill", "var(--color-info)")
         .attr("font-size", "8px")
         .attr("font-family", "LetteraMonoLL, monospace")
-        .text("↑ lower is better");
+        .text("↓ lower is better");
     }
 
     // Axes
@@ -265,23 +313,6 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
       .call((g) => g.selectAll("text").attr("fill", "#4A4A4A").attr("font-size", "9px").attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
-
-    // Tooltip
-    const tooltip = d3.select("body").selectAll(".bvs-tooltip").data([null]).join("div")
-      .attr("class", "bvs-tooltip")
-      .style("position", "fixed")
-      .style("background", "#161616")
-      .style("border", "1px solid #2A2A2A")
-      .style("border-radius", "3px")
-      .style("padding", "8px 10px")
-      .style("font-size", "11px")
-      .style("font-family", "LetteraMonoLL, monospace")
-      .style("color", "#C0C0C0")
-      .style("pointer-events", "none")
-      .style("opacity", 0)
-      .style("z-index", 200)
-      .style("line-height", "1.8")
-      .style("transition", "opacity 80ms");
 
     const banditByDay = new Map(banditSeries.map((d) => [d.day, d.value]));
     const staticByDay = new Map(staticSeries.map((d) => [d.day, d.value]));

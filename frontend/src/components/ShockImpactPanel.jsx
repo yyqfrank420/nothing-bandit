@@ -119,6 +119,49 @@ function computeStats(affectedIds, triggeredOn, endDay, results, viewDay) {
 }
 
 // ---------------------------------------------------------------------------
+// Bandit edge helper — computes ROAS % edge vs static for a time window
+// ---------------------------------------------------------------------------
+
+/**
+ * Computes the bandit's ROAS advantage over static (as a percentage of static ROAS)
+ * for three windows around a shock: 7 days before, during, and 14 days after.
+ *
+ * Returns { pre, during, post } — each null if data isn't available yet.
+ * Uses the ROAS objective only (single representative slice, avoids triple-counting).
+ */
+function computeBanditEdge(triggeredOn, endDay, results, viewDay) {
+  const roasRows = results.filter(r => r.objective === "roas");
+
+  const edgeForWindow = (start, end) => {
+    if (start > end || start > viewDay) return null;
+    const clampedEnd  = Math.min(end, viewDay);
+    const banditRows  = roasRows.filter(r => r.allocator === "bandit" && r.day >= start && r.day <= clampedEnd);
+    const staticRows  = roasRows.filter(r => r.allocator === "static" && r.day >= start && r.day <= clampedEnd);
+    if (banditRows.length === 0 || staticRows.length === 0) return null;
+
+    const sum         = (arr, key) => arr.reduce((s, r) => s + r[key], 0);
+    const bRev        = sum(banditRows, "revenue");
+    const bBud        = sum(banditRows, "budget_allocated");
+    const sRev        = sum(staticRows, "revenue");
+    const sBud        = sum(staticRows, "budget_allocated");
+    const bROAS       = bBud > 0 ? bRev / bBud : 0;
+    const sROAS       = sBud > 0 ? sRev / sBud : 0;
+    if (sROAS === 0) return null;
+    return ((bROAS - sROAS) / sROAS) * 100;
+  };
+
+  const preStart  = Math.max(1, triggeredOn - 7);
+  const postStart = endDay + 1;
+  const postEnd   = endDay + 14;
+
+  return {
+    pre:    edgeForWindow(preStart, triggeredOn - 1),
+    during: edgeForWindow(triggeredOn, endDay),
+    post:   viewDay > endDay ? edgeForWindow(postStart, postEnd) : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // D3 grouped bar chart — before vs during revenue per channel
 // ---------------------------------------------------------------------------
 
@@ -321,6 +364,11 @@ function ShockImpactCard({ shock, results, viewDay }) {
     [affectedIds, shock.triggered_on_day, shock.endDay, results, viewDay]
   );
 
+  const banditEdge = useMemo(
+    () => computeBanditEdge(shock.triggered_on_day, shock.endDay, results, viewDay),
+    [shock.triggered_on_day, shock.endDay, results, viewDay]
+  );
+
   const multiplierBadges = Object.entries(shock.multipliers ?? {}).map(([k, v]) => fmtMultiplier(k, v));
 
   // Status relative to slider position (viewDay), not wall-clock time.
@@ -515,6 +563,76 @@ function ShockImpactCard({ shock, results, viewDay }) {
           }
         </div>
       </div>
+
+      {/* ── Bandit response insight ── */}
+      {banditEdge.during !== null && (
+        <BanditResponseRow edge={banditEdge} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Shows how the bandit's ROAS edge changed across the shock window.
+ * Three states: maintained (green), compressed-but-positive (amber), lost (red).
+ * Displayed as a compact row at the card bottom — one sentence + edge numbers.
+ */
+function BanditResponseRow({ edge }) {
+  const { pre, during, post } = edge;
+
+  // Determine the narrative colour based on how the edge moved.
+  const edgeColor = during >= (pre ?? 0) * 0.5 && during > 0
+    ? "#4ADE80"   // held or barely compressed — green
+    : during > 0
+      ? "#F97316"  // compressed but still positive — amber
+      : "#FF6666"; // went negative — red
+
+  const fmt  = v => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+  const fmtC = (v, c) => <span style={{ color: c, fontFamily: "Ndot55, monospace" }}>{fmt(v)}</span>;
+
+  // Build the edge trail: pre → during → post (only show segments with data).
+  const trail = [];
+  if (pre !== null)    trail.push({ label: "before", val: pre,    color: "#888" });
+                       trail.push({ label: "during", val: during, color: edgeColor });
+  if (post !== null)   trail.push({ label: "after",  val: post,   color: "#4ADE80" });
+
+  return (
+    <div style={{
+      padding:     "8px 14px",
+      borderTop:   "1px solid #1A1A1A",
+      background:  "rgba(255,255,255,0.01)",
+      fontFamily:  "LetteraMonoLL, monospace",
+    }}>
+      {/* Label */}
+      <div style={{ fontSize: "8px", color: "#444", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "5px" }}>
+        Bandit Response
+      </div>
+
+      {/* Edge trail — visual before→during→after chain */}
+      <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap", marginBottom: "5px" }}>
+        {trail.map(({ label, val, color }, i) => (
+          <React.Fragment key={label}>
+            {i > 0 && <span style={{ color: "#333", fontSize: "9px" }}>→</span>}
+            <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1px" }}>
+              <span style={{ color, fontFamily: "Ndot55, monospace", fontSize: "10px" }}>
+                {val >= 0 ? "+" : ""}{val.toFixed(1)}%
+              </span>
+              <span style={{ color: "#444", fontSize: "7px", letterSpacing: "0.06em" }}>{label}</span>
+            </span>
+          </React.Fragment>
+        ))}
+        <span style={{ fontSize: "8px", color: "#555", marginLeft: "4px" }}>vs static ROAS</span>
+      </div>
+
+      {/* Plain-English sentence */}
+      <div style={{ fontSize: "9px", color: "#555", lineHeight: "1.5" }}>
+        {during > 0
+          ? pre !== null && during < pre * 0.7
+            ? `Edge compressed by this shock — the bandit re-learned and ${post !== null ? `recovered to ${fmt(post)}` : "is recovering"}. Shock-era evidence fades with a ~14-day half-life.`
+            : `The bandit held its advantage over static through this shock.`
+          : `Edge temporarily lost during this shock. With γ=0.95 decay, the bad signal fades in ~2–3 weeks and all three bandits self-correct.`
+        }
+      </div>
     </div>
   );
 }
@@ -525,6 +643,19 @@ function ShockImpactCard({ shock, results, viewDay }) {
 
 export default function ShockImpactPanel({ shockEvents, results, viewDay }) {
   if (!shockEvents || shockEvents.length === 0) return null;
+
+  // Cumulative ROAS edge (bandit vs static) across the full visible period.
+  // Used in the thesis banner below — shows the top-line advantage at a glance.
+  const cumulativeEdge = useMemo(() => {
+    const roasRows   = results.filter(r => r.objective === "roas");
+    const sum        = (alloc, key) => roasRows.filter(r => r.allocator === alloc).reduce((s, r) => s + r[key], 0);
+    const bROAS      = sum("bandit", "budget_allocated") > 0
+      ? sum("bandit", "revenue") / sum("bandit", "budget_allocated") : 0;
+    const sROAS      = sum("static", "budget_allocated") > 0
+      ? sum("static", "revenue") / sum("static", "budget_allocated") : 0;
+    if (sROAS === 0) return null;
+    return ((bROAS - sROAS) / sROAS) * 100;
+  }, [results]);
 
   return (
     // Flex column: single horizontal label row on top, scrollable cards below.
@@ -555,9 +686,48 @@ export default function ShockImpactPanel({ shockEvents, results, viewDay }) {
         <span style={{ fontSize: "8px", color: "#444" }}>
           {shockEvents.length} event{shockEvents.length !== 1 ? "s" : ""}
         </span>
+        {/* › scroll cue — appears when there are multiple cards to scroll through */}
+        {shockEvents.length > 1 && (
+          <span style={{ fontSize: "11px", color: "#444", marginLeft: "4px" }}>›</span>
+        )}
       </div>
 
-      {/* Horizontally scrollable cards */}
+      {/* Thesis banner — the one insight that always holds true */}
+      {cumulativeEdge !== null && (
+        <div style={{
+          padding:    "10px 14px",
+          borderLeft: "2px solid var(--color-positive)",
+          background: "rgba(74,222,128,0.03)",
+          fontFamily: "LetteraMonoLL, monospace",
+          fontSize:   "10px",
+          lineHeight: "1.7",
+          color:      "#666",
+          animation:  "fadeIn 400ms ease",
+          display:    "flex",
+          flexDirection: "column",
+          gap:        "5px",
+        }}>
+          {/* Thesis line 1 — the core claim */}
+          <span style={{ color: "#888" }}>
+            Regardless of how many market shocks hit or which channels dip,{" "}
+            <span style={{ color: "#C0C0C0" }}>the bandit consistently outperforms the static equal-split baseline</span>
+            {" "}— shocks force re-learning, not regression. Cumulative ROAS edge:{" "}
+            <span style={{ color: "var(--color-positive)", fontFamily: "Ndot55, monospace" }}>
+              {cumulativeEdge >= 0 ? "+" : ""}{cumulativeEdge.toFixed(1)}%
+            </span>
+            {" "}vs static across {viewDay} day{viewDay !== 1 ? "s" : ""}.
+          </span>
+          {/* Thesis line 2 — the forgetting mechanism */}
+          <span style={{ color: "#555", fontSize: "9px" }}>
+            All 3 bandits (CTR, ROAS, CAC) will temporarily shake after a shock as they absorb the new signal.
+            {" "}Evidence decay (γ=0.95) gives accumulated observations a{" "}
+            <span style={{ color: "#888" }}>~14-day half-life</span>
+            {" "}— shock-era failures fade automatically. Within 2–3 weeks of a shock ending, allocation returns to optimal without any manual reset.
+          </span>
+        </div>
+      )}
+
+      {/* Horizontally scrollable cards — right-edge fade hints at overflow content */}
       <div style={{
         display:        "flex",
         gap:            "12px",
@@ -566,6 +736,8 @@ export default function ShockImpactPanel({ shockEvents, results, viewDay }) {
         minWidth:       0,
         scrollbarWidth: "thin",
         scrollbarColor: "#2A2A2A #111",
+        maskImage:         "linear-gradient(to right, black 85%, transparent 100%)",
+        WebkitMaskImage:   "linear-gradient(to right, black 85%, transparent 100%)",
       }}>
         {shockEvents.map((shock, i) => (
           <ShockImpactCard

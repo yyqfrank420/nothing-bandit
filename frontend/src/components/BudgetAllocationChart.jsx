@@ -136,26 +136,62 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         .attr("d", line);
     });
 
-    // Shock event vertical lines
+    // Tooltip — set up before shock events so shock hit-areas can reference it
+    const tooltip = d3.select("body").selectAll(".ba-tooltip").data([null]).join("div")
+      .attr("class", "ba-tooltip")
+      .style("position", "fixed")
+      .style("background", "#161616")
+      .style("border", "1px solid #2A2A2A")
+      .style("border-radius", "3px")
+      .style("padding", "8px 10px")
+      .style("font-size", "11px")
+      .style("font-family", "LetteraMonoLL, monospace")
+      .style("color", "#C0C0C0")
+      .style("pointer-events", "none")
+      .style("opacity", 0)
+      .style("z-index", 200)
+      .style("line-height", "1.8")
+      .style("transition", "opacity 80ms");
+
+    // Shock event vertical lines + transparent hit-areas for hover tooltips
     shockEvents.forEach((shock) => {
       const shockDay = shock.triggered_on_day ?? shock.day;
       if (shockDay > 0 && shockDay <= (currentDay || 183)) {
+        const sx = xScale(shockDay);
+
         g.append("line")
-          .attr("x1", xScale(shockDay)).attr("x2", xScale(shockDay))
+          .attr("x1", sx).attr("x2", sx)
           .attr("y1", 0).attr("y2", innerH)
-          .attr("stroke", "#FF0000")
+          // style() — not attr() — so CSS variable resolves correctly
+          .style("stroke", "var(--color-accent)")
           .attr("stroke-width", 1)
           .attr("stroke-dasharray", "3,4")
           .attr("opacity", 0.45);
 
-        // Small "shock" label at the top
         g.append("text")
-          .attr("x", xScale(shockDay) + 3)
-          .attr("y", 8)
+          .attr("x", sx + 3).attr("y", 8)
           .attr("fill", "#FF4444")
           .attr("font-size", "8px")
           .attr("font-family", "LetteraMonoLL, monospace")
           .text("⚡");
+
+        // ±8px wide hit-area — full chart height — triggers tooltip on hover
+        g.append("rect")
+          .attr("x", sx - 8).attr("y", 0)
+          .attr("width", 16).attr("height", innerH)
+          .attr("fill", "transparent")
+          .on("mouseenter", function (event) {
+            tooltip
+              .style("opacity", 1)
+              .style("left", `${event.clientX + 14}px`)
+              .style("top", `${event.clientY - 14}px`)
+              .html(
+                `<div style="color:#FF4444;font-size:9px;margin-bottom:5px;letter-spacing:0.1em">⚡ ${shock.name}</div>` +
+                `<div style="color:#C0C0C0;font-size:10px;margin-bottom:6px;max-width:200px;white-space:normal;line-height:1.5">${shock.description}</div>` +
+                `<div style="color:#555;font-size:9px">Day ${shockDay} · ${shock.duration_days ?? shock.days_remaining ?? "?"} days</div>`
+              );
+          })
+          .on("mouseleave", () => tooltip.style("opacity", 0));
       }
     });
 
@@ -210,23 +246,45 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         .attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
-    // Interactive tooltip
-    const tooltip = d3.select("body").selectAll(".ba-tooltip").data([null]).join("div")
-      .attr("class", "ba-tooltip")
-      .style("position", "fixed")
-      .style("background", "#161616")
-      .style("border", "1px solid #2A2A2A")
-      .style("border-radius", "3px")
-      .style("padding", "8px 10px")
-      .style("font-size", "11px")
-      .style("font-family", "LetteraMonoLL, monospace")
-      .style("color", "#C0C0C0")
-      .style("pointer-events", "none")
-      .style("opacity", 0)
-      .style("z-index", 200)
-      .style("line-height", "1.8")
-      .style("transition", "opacity 80ms");
+    // Inline legend — top-right, shows top 3 channels by final-day allocation share.
+    // Helps readers identify dominant channels without needing the global legend.
+    const lastDay = days[days.length - 1];
+    const lastEntry = byDay.get(lastDay) ?? {};
+    const sortedByAlloc = CHANNEL_IDS
+      .map((id) => ({ id, alloc: lastEntry[id] ?? 0 }))
+      .filter((c) => c.alloc > 0.5)
+      .sort((a, b) => b.alloc - a.alloc);
 
+    const legendTop3 = sortedByAlloc.slice(0, 3);
+    const legendExtra = sortedByAlloc.length - 3;
+
+    if (legendTop3.length > 0) {
+      const legendG = g.append("g").attr("transform", `translate(${innerW - 2}, 2)`);
+      legendTop3.forEach(({ id }, i) => {
+        const y = i * 13;
+        legendG.append("circle")
+          .attr("cx", -5).attr("cy", y + 3).attr("r", 3)
+          .attr("fill", CHANNEL_COLORS[id]);
+        legendG.append("text")
+          .attr("x", -10).attr("y", y + 7)
+          .attr("text-anchor", "end")
+          .attr("fill", "#888")
+          .attr("font-size", "8px")
+          .attr("font-family", "LetteraMonoLL, monospace")
+          .text(CHANNEL_NAMES[id]);
+      });
+      if (legendExtra > 0) {
+        legendG.append("text")
+          .attr("x", -10).attr("y", legendTop3.length * 13 + 7)
+          .attr("text-anchor", "end")
+          .attr("fill", "#555")
+          .attr("font-size", "8px")
+          .attr("font-family", "LetteraMonoLL, monospace")
+          .text(`+${legendExtra} more`);
+      }
+    }
+
+    // Hit-area rect for the channel breakdown tooltip (separate from shock tooltips above)
     g.append("rect")
       .attr("width", innerW).attr("height", innerH)
       .attr("fill", "none")

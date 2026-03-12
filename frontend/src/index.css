@@ -65,8 +65,16 @@
   --color-muted:     #666666;
 
   /* Brand accent */
-  --color-accent:    #FF0000;
-  --color-accent-dim: rgba(255, 0, 0, 0.12);
+  --color-accent:       #FF0000;
+  --color-accent-dim:   rgba(255, 0, 0, 0.12);
+  --color-accent-tint:  rgba(255, 0, 0, 0.15);  /* active/selected state bg */
+
+  /* Semantic status colours */
+  --color-positive:     #4ADE80;   /* bandit winning, positive delta */
+  --color-negative:     #FF6666;   /* bandit losing, negative delta */
+  --color-info:         #22D3EE;   /* informational / CAC badge */
+  --color-info-dim:     rgba(34, 211, 238, 0.08);  /* info badge bg */
+  --color-warning:      #F97316;   /* caution */
 
   /* Channel colours — carefully chosen for legibility on dark bg */
   --ch-1: #4ECDC4;   /* Tech KOL       — teal */

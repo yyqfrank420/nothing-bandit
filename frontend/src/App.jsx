@@ -124,7 +124,8 @@ const CHANNEL_INFO = {
 // Small UI primitives
 // ---------------------------------------------------------------------------
 
-function Btn({ onClick, disabled, variant = "default", children, title }) {
+// spinning=true renders a tiny CSS spinner inside the button instead of text content.
+function Btn({ onClick, disabled, variant = "default", children, title, spinning = false }) {
   const base = {
     display: "inline-flex",
     alignItems: "center",
@@ -189,7 +190,16 @@ function Btn({ onClick, disabled, variant = "default", children, title }) {
         }
       }}
     >
-      {children}
+      {spinning ? (
+        <span style={{
+          display: "inline-block",
+          width: "10px", height: "10px",
+          border: "1.5px solid rgba(255,255,255,0.2)",
+          borderTopColor: "#F0F0F0",
+          borderRadius: "50%",
+          animation: "spin 500ms linear infinite",
+        }} />
+      ) : children}
     </button>
   );
 }
@@ -343,6 +353,8 @@ function ChannelTooltip({ channelId, x, y }) {
   );
 }
 
+// Full-screen overlay — only shown for multi-day ops (week/month), not for single-day clicks.
+// Single-day (+1 Day) shows an inline spinner inside the button instead.
 function LoadingOverlay({ visible }) {
   if (!visible) return null;
   return (
@@ -361,7 +373,7 @@ function LoadingOverlay({ visible }) {
           width: "32px",
           height: "32px",
           border: "2px solid #333",
-          borderTopColor: "#FF0000",
+          borderTopColor: "var(--color-accent)",
           borderRadius: "50%",
           animation: "spin 600ms linear infinite",
           margin: "0 auto 16px",
@@ -383,7 +395,9 @@ export default function App() {
   const [banditStates, setBanditStates] = useState([]);
   const [currentDay, setCurrentDay] = useState(0);   // highest simulated day
   const [viewDay, setViewDay] = useState(0);          // slider position (replay cursor)
-  const [isLoading, setIsLoading] = useState(false);  // true only during explicit button simulate
+  // isLoadingDays: how many days the current simulate call is for.
+  // 0 = idle, 1 = +1 Day (inline spinner only), >1 = full overlay for multi-day ops.
+  const [isLoadingDays, setIsLoadingDays] = useState(0);
   const [simulatingLabel, setSimulatingLabel] = useState("");  // inline status text
   const [autoRunning, setAutoRunning] = useState(false);
   const [activeShock, setActiveShock] = useState(null);
@@ -400,6 +414,8 @@ export default function App() {
   const [tourActive, setTourActive] = useState(false);
   // Ref so auto interval always reads current settings without stale closure.
   const settingsRef = useRef(DEFAULT_SETTINGS);
+  // Ref for scrolling into view after shock banner dismiss.
+  const shockPanelRef = useRef(null);
   const autoIntervalRef   = useRef(null);
   const sequentialRunning = useRef(false);  // true while +1Wk / +1Mo sequential loop is running
   const loadingRef        = useRef(false);
@@ -491,7 +507,7 @@ export default function App() {
 
     // Single backend call — backend simulates all days at once.
     loadingRef.current = true;
-    setIsLoading(true);
+    setIsLoadingDays(safe);
     setError(null);
     setSimulatingLabel(safe === 1 ? "" : `Simulating ${safe} days…`);
     let response;
@@ -500,12 +516,12 @@ export default function App() {
     } catch (e) {
       setError(e.message);
       loadingRef.current = false;
-      setIsLoading(false);
+      setIsLoadingDays(0);
       sequentialRunning.current = false;
       return;
     }
     loadingRef.current = false;
-    setIsLoading(false);
+    setIsLoadingDays(0);
     setSimulatingLabel("");
     setBanditStates(response.bandit_states);
 
@@ -557,8 +573,52 @@ export default function App() {
     autoRunning ? stopAuto() : startAuto();
   };
 
+  // Ref-wrap handleAutoToggle so the keyboard handler always calls the current version
+  // without needing to re-register the event listener on every render.
+  const handleAutoToggleRef = useRef(handleAutoToggle);
+  useEffect(() => { handleAutoToggleRef.current = handleAutoToggle; });
+
   // Keep settingsRef in sync with state so closures (fetchAndMerge, startAuto) always see latest.
-  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  // When auto is running and the interval changes, briefly show a "speed change on next start" note.
+  useEffect(() => {
+    const prevMs = settingsRef.current.autoIntervalMs;
+    settingsRef.current = settings;
+    if (autoRunning && settings.autoIntervalMs !== prevMs) {
+      setSimulatingLabel("speed change on next start");
+      const t = setTimeout(() => setSimulatingLabel(""), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [settings, autoRunning]);
+
+  // Keyboard shortcuts — Space, →, ←, Shift+→.
+  // Guards: skip when focus is on an input/textarea, or when the tour is active.
+  // Uses refs for all callbacks so the listener never goes stale between tourActive changes.
+  useEffect(() => {
+    const handler = (e) => {
+      const tag = e.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tourActive) return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        handleAutoToggleRef.current();      // always fresh via ref — no stale closure
+      } else if (e.code === "ArrowRight" && e.shiftKey) {
+        setViewDay(currentDayRef.current);
+        viewDayRef.current = currentDayRef.current;
+      } else if (e.code === "ArrowRight") {
+        if (!loadingRef.current && currentDayRef.current < MAX_DAYS) handleSimulate(1);
+      } else if (e.code === "ArrowLeft") {
+        setViewDay((d) => {
+          const next = Math.max(1, d - 1);
+          viewDayRef.current = next;
+          return next;
+        });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // handleSimulate is a stable useCallback — safe to omit. tourActive is the only reactive dep.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourActive]);
 
   const handleShock = async () => {
     if (shockPending || shocksExhausted) return;
@@ -587,7 +647,7 @@ export default function App() {
 
   const handleReset = async () => {
     stopAuto();
-    setIsLoading(true);
+    setIsLoadingDays(7);  // show overlay during reset
     try {
       await reset();
       setResults([]);
@@ -605,7 +665,7 @@ export default function App() {
     } catch (e) {
       setError(e.message);
     } finally {
-      setIsLoading(false);
+      setIsLoadingDays(0);
     }
   };
 
@@ -617,6 +677,7 @@ export default function App() {
     [results, viewDay]
   );
   const isReplaying = viewDay < currentDay && currentDay > 0;
+
 
   // -------------------------------------------------------------------------
   // Render
@@ -719,9 +780,15 @@ export default function App() {
         }
       `}</style>
 
-      {/* Shock banner */}
+      {/* Shock banner — dismissing scrolls to the impact panel below */}
       {activeShock && (
-        <ShockBanner shock={activeShock} onDismiss={() => setActiveShock(null)} />
+        <ShockBanner
+          shock={activeShock}
+          onDismiss={() => {
+            setActiveShock(null);
+            shockPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+        />
       )}
 
       {/* Settings panel */}
@@ -735,6 +802,9 @@ export default function App() {
 
       {/* Guided tour — triggered by "Get Started" on landing page */}
       <GuidedTour show={tourActive} onDone={() => setTourActive(false)} />
+
+      {/* Full-screen overlay only for multi-day operations (week/month) */}
+      <LoadingOverlay visible={isLoadingDays > 1} />
 
       {/* Channel legend tooltip */}
       {channelTooltip && <ChannelTooltip {...channelTooltip} />}
@@ -883,6 +953,7 @@ export default function App() {
                   min={1}
                   max={MAX_DAYS}
                   value={viewDay || 1}
+                  title="Drag to replay past days"
                   onChange={(e) => {
                     // Clamp to simulated days — can't replay what hasn't happened yet.
                     const d = Math.min(Number(e.target.value), currentDay);
@@ -927,34 +998,36 @@ export default function App() {
                 <div style={{
                   width: "10px", height: "10px",
                   border: "1px solid #444",
-                  borderTopColor: autoRunning ? "#22D3EE" : "#F0F0F0",
+                  borderTopColor: autoRunning ? "var(--color-info)" : "var(--color-text)",
                   borderRadius: "50%",
-                  animation: (isLoading || autoRunning) ? "spin 500ms linear infinite" : "none",
+                  animation: (isLoadingDays > 1 || autoRunning) ? "spin 500ms linear infinite" : "none",
                   flexShrink: 0,
-                  opacity: (isLoading || autoRunning) ? 1 : 0,
+                  opacity: (isLoadingDays > 1 || autoRunning) ? 1 : 0,
                   transition: "opacity 200ms",
                 }} />
                 <span style={{
                   fontSize: "10px", color: "#555",
                   letterSpacing: "0.06em", whiteSpace: "nowrap",
                   fontFamily: "LetteraMonoLL, monospace",
-                  opacity: (isLoading || autoRunning) && simulatingLabel ? 1 : 0,
+                  opacity: (isLoadingDays > 1 || autoRunning) && simulatingLabel ? 1 : 0,
                   transition: "opacity 200ms",
                 }}>
                   {simulatingLabel || "\u00A0"}
                 </span>
               </div>
+              {/* +1 Day: inline spinner instead of full-screen overlay */}
               <Btn
                 onClick={() => handleSimulate(1)}
-                disabled={isLoading || currentDay >= MAX_DAYS}
+                disabled={isLoadingDays > 0 || currentDay >= MAX_DAYS}
                 variant="primary"
-                title="Simulate 1 day"
+                title="Simulate 1 day  [→]"
+                spinning={isLoadingDays === 1}
               >
                 +1 Day
               </Btn>
               <Btn
                 onClick={() => handleSimulate(7)}
-                disabled={isLoading || currentDay >= MAX_DAYS}
+                disabled={isLoadingDays > 0 || currentDay >= MAX_DAYS}
                 variant="primary"
                 title="Simulate 1 week"
               >
@@ -962,7 +1035,7 @@ export default function App() {
               </Btn>
               <Btn
                 onClick={() => handleSimulate(30)}
-                disabled={isLoading || currentDay >= MAX_DAYS}
+                disabled={isLoadingDays > 0 || currentDay >= MAX_DAYS}
                 variant="primary"
                 title="Simulate 1 month"
               >
@@ -972,7 +1045,7 @@ export default function App() {
                 onClick={handleAutoToggle}
                 disabled={currentDay >= MAX_DAYS}
                 variant={autoRunning ? "active" : "primary"}
-                title="Auto-run — speed set in Settings"
+                title="Auto-run — speed set in Settings  [Space]"
               >
                 {autoRunning ? "■ Stop" : "▶ Auto"}
               </Btn>
@@ -982,7 +1055,7 @@ export default function App() {
 
               <Btn
                 onClick={handleShock}
-                disabled={isLoading || shockPending || shocksExhausted}
+                disabled={isLoadingDays > 0 || shockPending || shocksExhausted}
                 variant="shock"
                 title={shocksExhausted ? "All 10 shock events used — Reset to replay" : "Trigger a random market shock event"}
               >
@@ -990,7 +1063,7 @@ export default function App() {
               </Btn>
               <Btn
                 onClick={handleReset}
-                disabled={isLoading}
+                disabled={isLoadingDays > 0}
                 variant="danger"
                 title="Reset simulation to day 0"
               >
@@ -999,6 +1072,61 @@ export default function App() {
 
               {/* Divider */}
               <div style={{ width: "1px", height: "24px", background: "#282828" }} />
+
+              {/* ? keyboard shortcuts help icon */}
+              <div style={{ position: "relative" }}>
+                <button
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: "28px", height: "28px",
+                    background: "transparent",
+                    border: "1px solid #222",
+                    borderRadius: "50%", cursor: "pointer",
+                    color: "#555", fontSize: "11px",
+                    fontFamily: "LetteraMonoLL, monospace",
+                    transition: "all 200ms",
+                  }}
+                  title="Keyboard shortcuts"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "#444";
+                    e.currentTarget.style.color = "#C0C0C0";
+                    e.currentTarget.nextSibling.style.opacity = "1";
+                    e.currentTarget.nextSibling.style.pointerEvents = "none";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "#222";
+                    e.currentTarget.style.color = "#555";
+                    e.currentTarget.nextSibling.style.opacity = "0";
+                  }}
+                >
+                  ?
+                </button>
+                {/* Keyboard shortcuts tooltip — appears on ? hover */}
+                <div style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  right: 0,
+                  background: "#161616",
+                  border: "1px solid #2A2A2A",
+                  borderRadius: "4px",
+                  padding: "10px 14px",
+                  fontFamily: "LetteraMonoLL, monospace",
+                  fontSize: "10px",
+                  color: "#888",
+                  whiteSpace: "nowrap",
+                  lineHeight: "2",
+                  opacity: 0,
+                  transition: "opacity 150ms",
+                  zIndex: 300,
+                  pointerEvents: "none",
+                }}>
+                  <div style={{ color: "#555", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Keyboard Shortcuts</div>
+                  <div><span style={{ color: "#C0C0C0" }}>Space</span> · ▶/■ Auto play/pause</div>
+                  <div><span style={{ color: "#C0C0C0" }}>→</span> · +1 Day</div>
+                  <div><span style={{ color: "#C0C0C0" }}>←</span> · Replay back 1 day</div>
+                  <div><span style={{ color: "#C0C0C0" }}>Shift+→</span> · Jump to current day</div>
+                </div>
+              </div>
 
               {/* Settings button */}
               <button
@@ -1050,7 +1178,7 @@ export default function App() {
           padding: "32px 32px 0",
         }}>
           {/* Day 0 call-to-action — shown instead of blank charts */}
-          {currentDay === 0 && !isLoading && (
+          {currentDay === 0 && isLoadingDays === 0 && (
             <div style={{
               display: "flex",
               alignItems: "center",
@@ -1132,11 +1260,13 @@ export default function App() {
             </div>
 
             {/* Shock impact cards — one card per shock, persists until Reset */}
-            <ShockImpactPanel
-              shockEvents={shockEvents}
-              results={visibleResults}
-              viewDay={viewDay}
-            />
+            <div ref={shockPanelRef}>
+              <ShockImpactPanel
+                shockEvents={shockEvents}
+                results={visibleResults}
+                viewDay={viewDay}
+              />
+            </div>
 
             {/* Section label — data-tour anchors the spotlight to this slim element */}
             <div
@@ -1150,7 +1280,7 @@ export default function App() {
                 paddingLeft: "2px",
               }}
             >
-              Budget Allocation — 3 Objectives
+              3 Parallel Bandits — each optimising a different objective function independently
             </div>
 
             {/* 3-column grid — one column per objective */}
@@ -1206,6 +1336,10 @@ export default function App() {
                   <div style={{ padding: "0 20px 20px" }}>
                     <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px", marginTop: "20px" }}>
                       Bandit vs Static
+                      {/* Inline metric descriptor — one per objective column */}
+                      <span style={{ color: "#444", textTransform: "none", letterSpacing: 0, marginLeft: "6px", fontSize: "9px" }}>
+                        — running {obj === "cac" ? "CAC" : obj === "roas" ? "ROAS" : "avg CTR"} (cumulative)
+                      </span>
                     </div>
                     <BanditVsStaticChart
                       results={visibleResults}
@@ -1249,7 +1383,7 @@ export default function App() {
                 marginBottom: "4px",
                 paddingLeft: "2px",
               }}>
-                Bandit Confidence — Beta Posterior Distributions
+                Bandit Confidence — how certain the bandit is about each channel
               </div>
               {/* Interpretation note */}
               <p style={{
