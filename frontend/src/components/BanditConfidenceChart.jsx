@@ -62,12 +62,13 @@ function logBeta(a, b) {
   return logGamma(a) + logGamma(b) - logGamma(a + b);
 }
 
-// Simulation posteriors have alpha and beta >= 1, including boundary peaks.
-function posteriorMode(alpha, beta) {
-  if (alpha === 1 && beta === 1) return null;
-  if (alpha === 1) return 0;
-  if (beta === 1) return 1;
-  return (alpha - 1) / (alpha + beta - 2);
+// Positive Beta parameters can have one boundary mode or peaks at both boundaries.
+function posteriorModes(alpha, beta) {
+  if (alpha === 1 && beta === 1) return [];
+  if (alpha < 1 && beta < 1) return [0, 1];
+  if (alpha <= 1 && beta >= 1) return [0];
+  if (alpha >= 1 && beta <= 1) return [1];
+  return [(alpha - 1) / (alpha + beta - 2)];
 }
 
 export default function BanditConfidenceChart({ banditStates, objective }) {
@@ -101,8 +102,10 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
 
       const color = CHANNEL_COLORS[chId];
       const name  = CHANNEL_NAMES[chId];
-      const mode = posteriorMode(alpha, beta);
-      const modeLabel = mode === null ? "Uniform" : `Mode ${Math.round(mode * 100)}%`;
+      const modes = posteriorModes(alpha, beta);
+      const modeLabel = modes.length === 0
+        ? "Uniform"
+        : `${modes.length === 1 ? "Mode" : "Modes"} ${modes.map((mode) => `${Math.round(mode * 100)}%`).join(", ")}`;
 
       // Compute PDF
       const data = betaPDF(alpha, beta);
@@ -120,7 +123,7 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
         .attr("role", "img");
       svg.append("title").text(
         `${name}, ${objective.toUpperCase()} posterior: alpha ${alpha.toFixed(1)}, beta ${beta.toFixed(1)}. ` +
-        (mode === null ? "Uniform distribution with no unique mode." : `${modeLabel}.`)
+        (modes.length === 0 ? "Uniform distribution with no unique mode." : `${modeLabel}.`)
       );
 
       const margin = { top: 38, right: 6, bottom: 22, left: 6 };
@@ -189,7 +192,7 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
         .attr("font-family", "LetteraMonoLL, monospace")
         .text(`α ${alpha.toFixed(0)}   β ${beta.toFixed(0)}`);
 
-      if (mode !== null) {
+      for (const mode of modes) {
         g.append("line")
           .attr("x1", xScale(mode)).attr("x2", xScale(mode))
           .attr("y1", 0).attr("y2", iH)
