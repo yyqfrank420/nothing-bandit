@@ -293,7 +293,7 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
     g.append("g")
       .attr("transform", `translate(0,${innerH})`)
       .call(d3.axisBottom(xScale)
-        .ticks(Math.min(days.length, 5))
+        .tickValues(xScale.ticks(Math.max(2, Math.min(days.length, 5, Math.floor(innerW / 48)))).filter(Number.isInteger))
         .tickFormat((d) => `D${d}`)
         .tickSize(3))
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
