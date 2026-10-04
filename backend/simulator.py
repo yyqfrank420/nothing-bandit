@@ -5,7 +5,7 @@ Purpose: Day-by-day simulation runner for both the bandit and static allocators.
 Connects to: bandit.py    (sample_allocations — reads bandit state)
              channels.py  (CHANNELS, STATIC_WEIGHTS, DAILY_BUDGET, NOISE_SIGMA)
              database.py  (insert_daily_results_batch, batch_set_bandit_states,
-                           get_active_shocks, decrement_shock_durations, get_current_day)
+                           get_shocks, decrement_shock_durations, get_current_day)
 Inputs:  n_days (int), objective string
 Outputs: Inserts rows + updates bandit state; returns new row dicts
 
@@ -34,7 +34,7 @@ from channels import CHANNELS, DAILY_BUDGET, NOISE_SIGMA, REWARD_THRESHOLDS, STA
 from database import (
     batch_set_bandit_states,
     decrement_shock_durations_by,
-    get_active_shocks,
+    get_shocks,
     get_bandit_states_all,
     get_current_day,
     insert_daily_results_batch,
@@ -268,7 +268,7 @@ def run_full_simulation(
     # Per-day multipliers are rebuilt from this list using day_offset so shocks
     # expire correctly mid-run (e.g. a 5-day shock on a 30-day batch run only
     # applies to the first 5 days, not all 30).
-    active_shocks = get_active_shocks()
+    active_shocks = get_shocks()
 
     # Load bandit states for ALL objectives in ONE DB round-trip.
     # Within the day loop we apply reward + decay in-memory so each day's

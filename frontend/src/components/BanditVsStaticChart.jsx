@@ -35,8 +35,10 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
     if (svgRef.current) d3.select(svgRef.current).selectAll("*").remove();
     if (!results || results.length === 0 || !svgRef.current || W === 0) return;
 
-    const H = 140;
-    const margin = { top: 22, right: 12, bottom: 28, left: 50 };  // extra top margin for delta label
+    // Narrow CAC charts need two caption rows; the extra height preserves plot space.
+    const compactCACCaption = objective === "cac" && W - 78 < 240;
+    const H = compactCACCaption ? 156 : 140;
+    const margin = { top: compactCACCaption ? 44 : 28, right: 18, bottom: 32, left: 60 };
     const innerW = W - margin.left - margin.right;
     const innerH = H - margin.top - margin.bottom;
 
@@ -151,18 +153,32 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
       .style("border", "1px solid #2A2A2A")
       .style("border-radius", "3px")
       .style("padding", "8px 10px")
-      .style("font-size", "11px")
+      .style("font-size", "12px")
       .style("font-family", "LetteraMonoLL, monospace")
-      .style("color", "#C0C0C0")
+      .style("color", "var(--color-text)")
       .style("pointer-events", "none")
       .style("opacity", 0)
       .style("z-index", 200)
-      .style("line-height", "1.8")
+      .style("line-height", "1.6")
+      .style("box-sizing", "border-box")
+      .style("width", "max-content")
+      .style("max-width", "min(320px, calc(100vw - 16px))")
+      .style("max-height", "calc(100vh - 16px)")
+      .style("overflow", "auto")
+      .style("overflow-wrap", "anywhere")
       .style("transition", "opacity 80ms");
+
+    function showTooltip(event, content) {
+      tooltip.html(content).style("opacity", 1);
+      const { width, height } = tooltip.node().getBoundingClientRect();
+      const left = Math.max(8, Math.min(event.clientX + 14, window.innerWidth - width - 8));
+      const top = Math.max(8, Math.min(event.clientY - 14, window.innerHeight - height - 8));
+      tooltip.style("left", `${left}px`).style("top", `${top}px`);
+    }
 
     // Shock lines + transparent hit-areas for hover tooltips
     shockEvents.forEach((shock) => {
-      const shockDay = shock.triggered_on_day ?? shock.day;
+      const shockDay = shock.start_day;
       if (shockDay > 0 && shockDay <= (currentDay || 183)) {
         const sx = xScale(shockDay);
 
@@ -177,19 +193,16 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
 
         // ±8px hit-area — full chart height
         g.append("rect")
+          .attr("class", "shock-hit-area")
           .attr("x", sx - 8).attr("y", 0)
           .attr("width", 16).attr("height", innerH)
           .attr("fill", "transparent")
           .on("mouseenter", function (event) {
-            tooltip
-              .style("opacity", 1)
-              .style("left", `${event.clientX + 14}px`)
-              .style("top", `${event.clientY - 14}px`)
-              .html(
-                `<div style="color:#FF4444;font-size:9px;margin-bottom:5px;letter-spacing:0.1em">⚡ ${shock.name}</div>` +
-                `<div style="color:#C0C0C0;font-size:10px;margin-bottom:6px;max-width:200px;white-space:normal;line-height:1.5">${shock.description}</div>` +
-                `<div style="color:#555;font-size:9px">Day ${shockDay} · ${shock.duration_days ?? shock.days_remaining ?? "?"} days</div>`
-              );
+            showTooltip(event,
+              `<div style="color:var(--color-negative);margin-bottom:5px">${shock.name}</div>` +
+              `<div style="color:var(--color-text);margin-bottom:6px">${shock.description}</div>` +
+              `<div style="color:var(--color-text-2)">Days ${shockDay}-${shock.end_day}</div>`
+            );
           })
           .on("mouseleave", () => tooltip.style("opacity", 0));
       }
@@ -250,25 +263,28 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         ? ((lastStatic.value - lastBandit.value) / lastStatic.value) * 100   // lower CAC = positive
         : ((lastBandit.value - lastStatic.value) / lastStatic.value) * 100;
 
-      const label = delta >= 0 ? `+${delta.toFixed(1)}%` : `${delta.toFixed(1)}%`;
-      const labelColor = delta >= 0 ? "#4ADE80" : "#FF6666";
+      const roundedDelta = Math.round(delta * 10) / 10;
+      const label = roundedDelta > 0 ? `+${roundedDelta.toFixed(1)}%` : `${roundedDelta.toFixed(1)}%`;
+      const labelColor = roundedDelta === 0
+        ? "var(--color-text-2)"
+        : roundedDelta > 0 ? "var(--color-positive)" : "var(--color-negative)";
 
       g.append("text")
         .attr("x", innerW)
-        .attr("y", -8)               // sits in the 22px top margin — well clear of the chart area
+        .attr("y", -8)               // stays in the top margin, clear of the chart area
         .attr("text-anchor", "end")
-        .attr("font-size", "10px")
-        .attr("font-family", "Ndot55, monospace")
-        .attr("fill", labelColor)
+        .attr("font-size", "12px")
+        .attr("font-family", "LetteraMonoLL, monospace")
+        .style("fill", labelColor)
         .text(label);
     }
 
     if (isCAC) {
       g.append("text")
         .attr("x", 0)
-        .attr("y", -8)
+        .attr("y", compactCACCaption ? -24 : -8)
         .style("fill", "var(--color-text-2)")
-        .attr("font-size", "9px")
+        .attr("font-size", "11px")
         .attr("font-family", "LetteraMonoLL, monospace")
         .text("Lower is better");
     }
@@ -281,7 +297,7 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         .tickFormat((d) => `D${d}`)
         .tickSize(3))
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
-      .call((g) => g.selectAll("text").attr("fill", "#4A4A4A").attr("font-size", "9px").attr("font-family", "LetteraMonoLL, monospace"))
+      .call((g) => g.selectAll("text").style("fill", "var(--color-text-2)").attr("font-size", "11px").attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
     // Y-axis tick format per metric type:
@@ -300,7 +316,7 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         .tickFormat(yTickFmt)
         .tickSize(3))
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
-      .call((g) => g.selectAll("text").attr("fill", "#4A4A4A").attr("font-size", "9px").attr("font-family", "LetteraMonoLL, monospace"))
+      .call((g) => g.selectAll("text").style("fill", "var(--color-text-2)").attr("font-size", "11px").attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
     const banditByDay = new Map(banditSeries.map((d) => [d.day, d.value]));
@@ -339,21 +355,19 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
             ? (v) => `${v.toFixed(2)}×`
             : (v) => `${(v * 100).toFixed(2)}%`;
 
-        tooltip
-          .style("opacity", 1)
-          .style("left", `${event.clientX + 14}px`)
-          .style("top", `${event.clientY - 14}px`)
-          .html(
-            `<div style="color:#666;font-size:9px;margin-bottom:4px">DAY ${day} · ${metricLabel}</div>` +
-            `<span style="color:#4ADE80">Bandit</span>: ${fmt(bv)}<br/>` +
-            `<span style="color:#444">Static</span>: ${fmt(sv ?? 0)}`
-          );
+        showTooltip(event,
+          `<div style="color:var(--color-text-2);margin-bottom:4px">DAY ${day} · ${metricLabel}</div>` +
+          `<span style="color:var(--color-positive)">Bandit</span>: ${fmt(bv)}<br/>` +
+          `<span style="color:var(--color-text-2)">Static</span>: ${fmt(sv ?? 0)}`
+        );
       })
       .on("mouseleave", () => {
         tooltip.style("opacity", 0);
         hoverDotBandit.attr("opacity", 0);
         hoverDotStatic.attr("opacity", 0);
       });
+
+    g.selectAll(".shock-hit-area").raise();
 
   }, [results, objective, shockEvents, currentDay, W]);
 

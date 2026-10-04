@@ -78,45 +78,39 @@ const MAX_DAYS = 183;  // full 6-month campaign
 const CHANNEL_INFO = {
   1: {
     what: "Tech influencers — YouTube reviewers & Twitter personalities",
-    ctr:  "4.5% — high click rate",
+    ctr:  "4.5%",
     roas: "2.8× return on spend",
     cac:  "$120 per customer",
-    note: "Strong awareness driver. High clicks, moderate purchase conversion.",
   },
   2: {
     what: "Design & aesthetic influencers — Figma creators, creative Twitter",
-    ctr:  "3.0% — solid engagement",
+    ctr:  "3.0%",
     roas: "3.5× return on spend",
     cac:  "$145 per customer",
-    note: "High-intent design buyers. Good brand fit for Nothing's aesthetic.",
   },
   3: {
     what: "Broad-reach lifestyle influencers — general audience",
-    ctr:  "2.0% — below average",
+    ctr:  "2.0%",
     roas: "1.8× return on spend",
-    cac:  "$220 per customer — most expensive",
-    note: "Low purchase intent. The bandit learns to de-prioritise this quickly.",
+    cac:  "$220 per customer",
   },
   4: {
     what: "Paid placements in Instagram feeds and Stories",
-    ctr:  "2.5% — moderate",
+    ctr:  "2.5%",
     roas: "2.5× return on spend",
     cac:  "$175 per customer",
-    note: "Consistent but unexceptional. Good for brand visibility in SEA.",
   },
   5: {
     what: "Short-form video ads on TikTok",
-    ctr:  "5.5% — highest click rate",
-    roas: "1.5× return — lowest",
+    ctr:  "5.5%",
+    roas: "1.5× return on spend",
     cac:  "$200 per customer",
-    note: "Viral reach drives clicks but converts poorly. High volume, low quality.",
   },
   6: {
     what: "Search ads shown to people actively looking for phones",
-    ctr:  "1.5% — lower click rate",
-    roas: "4.2× return — best",
-    cac:  "$90 per customer — cheapest",
-    note: "Captures high-intent buyers. Best ROAS and CAC. The efficiency winner.",
+    ctr:  "1.5%",
+    roas: "4.2× return on spend",
+    cac:  "$90 per customer",
   },
 };
 
@@ -135,103 +129,31 @@ function Btn({ onClick, disabled, variant = "default", children, title, spinning
   );
 }
 
-function ShockBanner({ shock, onDismiss }) {
+function ShockBanner({ shock, onDismiss, onViewImpact }) {
   const [visible, setVisible] = useState(false);
-
+  const dismissTimerRef = useRef(null);
   useEffect(() => {
-    // Animate in
-    const t = setTimeout(() => setVisible(true), 10);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setVisible(true), 10);
+    return () => { clearTimeout(timer); clearTimeout(dismissTimerRef.current); };
   }, [shock]);
 
-  const handleDismiss = () => {
+  const close = (callback) => {
     setVisible(false);
-    setTimeout(onDismiss, 400);
+    dismissTimerRef.current = setTimeout(callback, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180);
   };
-
   if (!shock) return null;
-
+  const affectedChannels = shock.affected_channel_names ?? shock.affected_channels ?? [];
   return (
-    <div
-      className="shock-banner"
-      style={{
-        position: "fixed",
-        top: "20px",
-        left: "50%",
-        transform: `translateX(-50%) translateY(${visible ? "0" : "-120px"})`,
-        zIndex: 1000,
-        maxWidth: "640px",
-        width: "calc(100% - 48px)",
-        background: "#1A0A0A",
-        border: "1px solid #FF0000",
-        borderRadius: "4px",
-        padding: "16px 20px",
-        boxShadow: "0 0 40px rgba(255,0,0,0.2)",
-        transition: "transform 400ms cubic-bezier(0.22, 1, 0.36, 1)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
-        <div style={{ flex: 1 }}>
-          {/* Pulse dot */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-            <div
-              className="decorative-motion"
-              style={{
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                background: "#FF0000",
-                flexShrink: 0,
-              }}
-            />
-            <span style={{
-              fontFamily: "Ndot55, monospace",
-              fontSize: "13px",
-              color: "#FF4444",
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-            }}>
-              {shock.name}
-            </span>
-          </div>
-          <p style={{
-            fontSize: "12px",
-            color: "#C0C0C0",
-            lineHeight: "1.6",
-            marginBottom: "10px",
-          }}>
-            {shock.description}
-          </p>
-          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "11px", color: "#888", letterSpacing: "0.05em" }}>
-              AFFECTS: <span style={{ color: "#E0A0A0" }}>
-                {shock.affected_channels?.join(", ") || shock.affected_channel_names?.join(", ")}
-              </span>
-            </span>
-            <span style={{ fontSize: "11px", color: "#888", letterSpacing: "0.05em" }}>
-              DURATION: <span style={{ color: "#E0A0A0" }}>
-                {shock.duration_days || shock.days_remaining} DAYS
-              </span>
-            </span>
-          </div>
-        </div>
-        <button
-          aria-label="Dismiss market shock"
-          className="dashboard-icon-button"
-          onClick={handleDismiss}
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--color-text-2)",
-            cursor: "pointer",
-            fontSize: "18px",
-            lineHeight: 1,
-            padding: "2px 4px",
-            flexShrink: 0,
-          }}
-        >
-          ×
-        </button>
+    <div className="shock-banner" role="status" aria-live="polite" data-visible={visible}>
+      <h2 className="shock-banner-title">{shock.name}</h2>
+      <p className="shock-banner-description">{shock.description}</p>
+      <dl className="shock-banner-details">
+        <div><dt>Affects</dt><dd>{affectedChannels.join(", ")}</dd></div>
+        <div><dt>Active days</dt><dd>{shock.start_day} to {shock.end_day}</dd></div>
+      </dl>
+      <div className="shock-banner-actions">
+        <Btn onClick={() => close(onViewImpact)} disabled={!visible} variant="primary">View impact</Btn>
+        <Btn onClick={() => close(onDismiss)} disabled={!visible}>Dismiss</Btn>
       </div>
     </div>
   );
@@ -266,6 +188,7 @@ function ChannelTooltip({ channelId, x, y, onEnter, onLeave, onBlur, onDismiss }
         <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: color, flexShrink: 0 }} />
         <span style={{ fontSize: "13px", color: "#E0E0E0", letterSpacing: "0.05em" }}>{name}</span>
       </div>
+      <p className="channel-tooltip-assumption">Simulation baseline assumptions</p>
       <div style={{ fontSize: "13px", color: "#888", marginBottom: "10px", lineHeight: "1.5" }}>
         {info.what}
       </div>
@@ -281,7 +204,7 @@ function ChannelTooltip({ channelId, x, y, onEnter, onLeave, onBlur, onDismiss }
         </div>
       </div>
       <div style={{ fontSize: "12px", color: "var(--color-text-2)", borderTop: "1px solid #1E1E1E", paddingTop: "8px", lineHeight: "1.6" }}>
-        {info.note}
+        These are model inputs. Daily outcomes vary with settings, noise, and market shocks.
       </div>
     </div>
   );
@@ -330,6 +253,7 @@ export default function App() {
   const [activeShock, setActiveShock] = useState(null);
   const [shockEvents, setShockEvents] = useState([]);
   const [error, setError] = useState(null);
+  const [initialLoadFailed, setInitialLoadFailed] = useState(false);
   const [shockPending, setShockPending] = useState(false);
   const [shocksExhausted, setShocksExhausted] = useState(false);
   const tooltipDismissTimerRef = useRef(null);
@@ -342,8 +266,9 @@ export default function App() {
   const [tourActive, setTourActive] = useState(false);
   // Ref so auto interval always reads current settings without stale closure.
   const settingsRef = useRef(DEFAULT_SETTINGS);
-  // Ref for scrolling into view after shock banner dismiss.
+  // Ref for the explicit View impact action.
   const shockPanelRef = useRef(null);
+  const headerRef = useRef(null);
   const autoIntervalRef   = useRef(null);
   const sequentialRunning = useRef(false);  // true while +1Wk / +1Mo sequential loop is running
   const loadingRef        = useRef(false);
@@ -358,7 +283,7 @@ export default function App() {
   useEffect(() => {
     async function load() {
       try {
-        const { results: res, bandit_states: states, active_shocks: shocks, current_day: stateDay } = await getState();
+        const { results: res, bandit_states: states, active_shocks: shocks, shock_events: events } = await getState();
         setResults(res);
         setBanditStates(states);
         if (res.length > 0) {
@@ -371,23 +296,15 @@ export default function App() {
         } else {
           setShowLanding(true);   // day 0 — show landing
         }
-        if (shocks.length > 0) {
-          // Enrich each restored shock with a stable endDay computed from the current
-          // simulation day + days_remaining. days_remaining in the DB decrements each tick,
-          // so we must pin endDay at load time to prevent it drifting as simulation runs.
-          const enriched = shocks.map(s => ({
-            ...s,
-            endDay: s.endDay ?? (stateDay + s.days_remaining - 1),
-          }));
-          setShockEvents(enriched);
-          setActiveShock(enriched[enriched.length - 1]);  // show most recent
-        }
+        setShockEvents(events);
+        if (shocks.length > 0) setActiveShock(shocks[shocks.length - 1]);
       } catch (e) {
         const msg = e.name === "AbortError"
           ? "The simulation service took too long to respond. Reload the page to try again."
           : "We couldn't connect to the simulation service. Reload the page to try again.";
         setError(msg);
-        setShowLanding(false);  // don't block on error — show dashboard with error bar
+        setInitialLoadFailed(true);
+        setShowLanding(false);
       }
     }
     load();
@@ -415,7 +332,7 @@ export default function App() {
       setViewDay(response.current_day);
       viewDayRef.current = response.current_day;
     } catch (e) {
-      setError(e.message);
+      setError("Auto-run request failed. Reload to restore the latest campaign state.");
       setAutoRunning(false);
       if (autoIntervalRef.current) {
         clearInterval(autoIntervalRef.current);
@@ -445,7 +362,7 @@ export default function App() {
     try {
       response = await simulate(safe, settingsRef.current);
     } catch (e) {
-      setError(e.message);
+      setError("Simulation request failed. Reload to restore the latest campaign state before trying again.");
       loadingRef.current = false;
       setIsLoadingDays(0);
       sequentialRunning.current = false;
@@ -528,7 +445,7 @@ export default function App() {
   // Shortcuts apply only to the dashboard canvas; focused controls retain native keys.
   useEffect(() => {
     const handler = (e) => {
-      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || tourActive || settingsOpen || showLanding !== false) return;
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || tourActive || settingsOpen || initialLoadFailed || showLanding !== false) return;
       if (e.target instanceof Element && e.target.closest("input, textarea, select, button, a, [tabindex], [contenteditable], [role='button']")) return;
       if (e.code === "Space" && !e.shiftKey) {
         e.preventDefault();
@@ -553,7 +470,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tourActive, settingsOpen, showLanding, autoRunning, handleSimulate]);
+  }, [tourActive, settingsOpen, initialLoadFailed, showLanding, autoRunning, handleSimulate]);
 
   const handleShock = async () => {
     if (loadingRef.current || sequentialRunning.current || shockPending || shocksExhausted) return;
@@ -563,19 +480,13 @@ export default function App() {
     try {
       const event = await triggerShock();
       setActiveShock(event);
-      // Pin endDay at trigger time (triggered_on_day + duration - 1) so the impact panel
-      // shows a stable range even as days_remaining decrements in the DB.
-      setShockEvents((prev) => [...prev, {
-        ...event,
-        triggered_on_day: currentDay,
-        endDay: currentDay + (event.duration_days ?? 14) - 1,
-      }]);
+      setShockEvents((prev) => [...prev, event]);
     } catch (e) {
       // 409 = all unique events used up — disable the button rather than showing an error bar.
       if (e.message?.includes("409") || e.message?.includes("SHOCKS_EXHAUSTED")) {
         setShocksExhausted(true);
       } else {
-        setError(e.message);
+        setError("Market shock request failed. Reload to restore the latest campaign state.");
       }
     } finally {
       setShockPending(false);
@@ -606,7 +517,7 @@ export default function App() {
       setShocksExhausted(false);
       setShowLanding(true);   // return to landing after reset
     } catch (e) {
-      setError(e.message);
+      setError("Reset request failed. Reload to check the current campaign state.");
     } finally {
       loadingRef.current = false;
       setOperationBusy(false);
@@ -629,6 +540,14 @@ export default function App() {
   // Landing page is shown on first load (day 0). After Reset it reappears.
   // null = initial fetch in-flight. Show a loading screen so the user doesn't
   // see a blank page while waiting for /api/state (hung backend = infinite blank).
+  if (initialLoadFailed) {
+    return <main className="initial-load-unavailable">
+      <span className="brand-dot" aria-hidden="true" />
+      <h1>Simulation unavailable</h1>
+      <p role="alert">{error}</p>
+      <Btn variant="primary" onClick={() => window.location.reload()}>Reload</Btn>
+    </main>;
+  }
   if (showLanding === null) {
     return (
       <div style={{
@@ -675,15 +594,20 @@ export default function App() {
         }
       `}</style>
 
-      {/* Shock banner — dismissing scrolls to the impact panel below */}
       {activeShock && (
-        <ShockBanner
-          shock={activeShock}
-          onDismiss={() => {
+        <ShockBanner shock={activeShock} onDismiss={() => setActiveShock(null)}
+          onViewImpact={() => {
             setActiveShock(null);
-            shockPanelRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
-          }}
-        />
+            if (shockPanelRef.current) {
+              const header = headerRef.current;
+              const headerHeight = header && getComputedStyle(header).position === "sticky"
+                ? header.getBoundingClientRect().height : 0;
+              window.scrollTo({
+                top: Math.max(0, shockPanelRef.current.getBoundingClientRect().top + window.scrollY - headerHeight - 16),
+                behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+              });
+            }
+          }} />
       )}
 
       {/* Settings panel */}
@@ -731,7 +655,7 @@ export default function App() {
             Header
             ---------------------------------------------------------------- */}
         <a className="skip-link" href="#dashboard-main">Skip to dashboard</a>
-        <header className="dashboard-header">
+        <header ref={headerRef} className="dashboard-header">
           <div className="dashboard-header-inner">
             <div className="dashboard-masthead">
               <div className="dashboard-brand">
