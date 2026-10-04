@@ -8,33 +8,52 @@
  * Inputs:
  *   onStart      — callback: enter dashboard at day 0 (no tour)
  *   onGetStarted — callback: enter dashboard at day 0 AND trigger guided tour
- *   onSimulate   — callback(nDays): simulate n days then enter dashboard (no tour)
+ *   onSimulate   — callback(nDays): resolves true on success, false on failure
+ *   error        — simulation failure message shown with recovery actions
  * Outputs: Full-viewport React element
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
-export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
+export default function LandingPage({ onStart, onGetStarted, onSimulate, error }) {
   const [visible,  setVisible]  = useState(false);   // controls fade-in
   const [leaving,  setLeaving]  = useState(false);   // controls fade-out
   const [loading,  setLoading]  = useState(false);   // +1 Day in progress
+  const dismissTimer = useRef(null);
+  const dismissing = useRef(false);
+  const mounted = useRef(false);
+  const simulating = useRef(false);
 
   // Slight delay before fade-in so browser has painted the initial black frame.
   useEffect(() => {
+    mounted.current = true;
     const t = setTimeout(() => setVisible(true), 60);
-    return () => clearTimeout(t);
+    return () => {
+      mounted.current = false;
+      clearTimeout(t);
+      clearTimeout(dismissTimer.current);
+    };
   }, []);
 
   // Fade out, then call the callback once the transition is done.
   function dismiss(cb) {
+    if (dismissing.current || !mounted.current) return;
+    dismissing.current = true;
     setLeaving(true);
-    setTimeout(cb, 500);
+    dismissTimer.current = setTimeout(cb, 500);
   }
 
   async function handleSimulate() {
+    if (simulating.current || dismissing.current) return;
+    simulating.current = true;
     setLoading(true);
-    await onSimulate(1);
-    dismiss(onStart);
+    try {
+      const succeeded = await onSimulate(1);
+      if (succeeded) dismiss(onStart);
+    } finally {
+      simulating.current = false;
+      if (mounted.current) setLoading(false);
+    }
   }
 
   const opacity = leaving ? 0 : visible ? 1 : 0;
@@ -51,20 +70,28 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
           from { opacity: 0; transform: translateY(14px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @media (prefers-reduced-motion: reduce) {
+          .landing-page, .landing-page * {
+            animation: none !important;
+            transition: none !important;
+            transform: none !important;
+          }
+        }
       `}</style>
 
-      <div style={{
+      <main className="landing-page" aria-labelledby="landing-title" style={{
         position:        "fixed",
         inset:           0,
         background:      "#0D0D0D",
         display:         "flex",
         flexDirection:   "column",
         alignItems:      "center",
-        justifyContent:  "center",
+        padding:         "48px 24px 24px",
+        boxSizing:       "border-box",
+        overflowY:       "auto",
         zIndex:          2000,
         opacity,
         transition:      "opacity 500ms ease",
-        userSelect:      "none",
       }}>
 
         {/* Subtle dot-grid background — same vibe as Nothing's product pages */}
@@ -85,10 +112,14 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
           alignItems:    "center",
           gap:           "0",
           textAlign:     "center",
+          width:         "100%",
+          maxWidth:      "880px",
+          flexShrink:    0,
+          margin:        "auto 0",
         }}>
 
           {/* Nothing red dot — large version with slow pulse */}
-          <div style={{
+          <div aria-hidden="true" style={{
             width:        "18px",
             height:       "18px",
             borderRadius: "50%",
@@ -99,28 +130,31 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
             // Entrance
             opacity:    visible ? 1 : 0,
             transform:  visible ? "scale(1)" : "scale(0.4)",
-            transition: "opacity 500ms ease 0ms, transform 500ms cubic-bezier(0.34,1.56,0.64,1) 0ms",
+            transition: "opacity 500ms ease 0ms, transform 500ms cubic-bezier(0.22,1,0.36,1) 0ms",
           }} />
 
           {/* Title */}
-          <div style={{
+          <h1 id="landing-title" style={{
             fontFamily:     "Ndot55, monospace",
             fontSize:       "clamp(32px, 6vw, 60px)",
             color:          "#F0F0F0",
             letterSpacing:  "0.12em",
             textTransform:  "uppercase",
-            lineHeight:     1,
-            marginBottom:   "20px",
+            lineHeight:     1.2,
+            margin:         "0 0 20px",
+            fontWeight:     400,
+            textWrap:       "balance",
             animation:      visible ? "landingFadeUp 600ms ease 150ms both" : "none",
           }}>
             Nothing Bandit™
-          </div>
+          </h1>
 
           {/* Descriptor row */}
           <div style={{
             fontFamily:    "LetteraMonoLL, monospace",
             fontSize:      "11px",
-            color:         "#444",
+            color:         "#999",
+            lineHeight:    1.7,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
             marginBottom:  "8px",
@@ -132,7 +166,8 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
           <div style={{
             fontFamily:    "LetteraMonoLL, monospace",
             fontSize:      "10px",
-            color:         "#2E2E2E",
+            color:         "#888",
+            lineHeight:    1.7,
             letterSpacing: "0.1em",
             marginBottom:  "64px",
             animation:     visible ? "landingFadeUp 600ms ease 380ms both" : "none",
@@ -144,14 +179,18 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
           <div style={{
             display:   "flex",
             gap:       "12px",
+            flexWrap:  "wrap",
+            justifyContent: "center",
+            maxWidth:  "100%",
             animation: visible ? "landingFadeUp 600ms ease 500ms both" : "none",
           }}>
             {/* Get Started — enter dashboard + trigger guided tour */}
             <button
               onClick={() => dismiss(onGetStarted)}
-              disabled={loading}
+              disabled={loading || leaving}
               style={{
                 padding:       "12px 28px",
+                minHeight:     "44px",
                 background:    "transparent",
                 border:        "1px solid #333",
                 borderRadius:  "3px",
@@ -181,14 +220,16 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
             {/* +1 Day — simulate one day then enter dashboard */}
             <button
               onClick={handleSimulate}
-              disabled={loading}
+              disabled={loading || leaving}
+              aria-busy={loading}
               style={{
                 padding:       "12px 28px",
+                minHeight:     "44px",
                 background:    loading ? "#1A1A1A" : "#FF0000",
                 border:        "1px solid",
                 borderColor:   loading ? "#333" : "#FF0000",
                 borderRadius:  "3px",
-                color:         loading ? "#555" : "#FFFFFF",
+                color:         loading ? "#999" : "#FFFFFF",
                 fontFamily:    "LetteraMonoLL, monospace",
                 fontSize:      "11px",
                 letterSpacing: "0.1em",
@@ -214,7 +255,7 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
             >
               {loading ? (
                 <>
-                  <div style={{
+                  <div aria-hidden="true" style={{
                     width: "10px", height: "10px",
                     border: "1px solid #444", borderTopColor: "#888",
                     borderRadius: "50%",
@@ -226,23 +267,39 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate }) {
               ) : "+1 Day (skip tutorial)"}
             </button>
           </div>
+          {error && (
+            <p role="alert" style={{
+              maxWidth: "48ch",
+              margin: "20px 0 0",
+              color: "#F0F0F0",
+              fontFamily: "LetteraMonoLL, monospace",
+              fontSize: "12px",
+              lineHeight: 1.6,
+              overflowWrap: "anywhere",
+            }}>
+              {error} Try +1 Day again, or select Get Started.
+            </p>
+          )}
         </div>
 
         {/* Bottom label */}
-        <div style={{
-          position:      "absolute",
-          bottom:        "32px",
+        <footer style={{
+          position:      "relative",
+          flexShrink:    0,
+          marginTop:     "40px",
+          textAlign:     "center",
           fontFamily:    "LetteraMonoLL, monospace",
           fontSize:      "9px",
-          color:         "#222",
+          color:         "#888",
+          lineHeight:    1.6,
           letterSpacing: "0.1em",
           textTransform: "uppercase",
           animation:     visible ? "landingFadeUp 600ms ease 700ms both" : "none",
         }}>
           Nothing Technology Ltd · Prototype
-        </div>
+        </footer>
 
-      </div>
+      </main>
     </>
   );
 }

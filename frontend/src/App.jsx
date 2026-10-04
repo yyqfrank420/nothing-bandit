@@ -124,7 +124,7 @@ const CHANNEL_INFO = {
 // Small UI primitives
 // ---------------------------------------------------------------------------
 
-// spinning=true renders a tiny CSS spinner inside the button instead of text content.
+// Keep the button name visible while an operation is pending.
 function Btn({ onClick, disabled, variant = "default", children, title, spinning = false }) {
   const base = {
     display: "inline-flex",
@@ -158,12 +158,12 @@ function Btn({ onClick, disabled, variant = "default", children, title, spinning
     danger: {
       background: "transparent",
       borderColor: "#FF0000",
-      color: "#FF0000",
+      color: "#FF6666",
     },
     active: {
       background: "#FF0000",
       borderColor: "#FF0000",
-      color: "#FFFFFF",
+      color: "#0D0D0D",
     },
     shock: {
       background: "rgba(255,0,0,0.08)",
@@ -174,6 +174,8 @@ function Btn({ onClick, disabled, variant = "default", children, title, spinning
 
   return (
     <button
+      className="dashboard-button"
+      aria-busy={spinning || undefined}
       style={{ ...base, ...variants[variant] }}
       onClick={onClick}
       disabled={disabled}
@@ -181,7 +183,7 @@ function Btn({ onClick, disabled, variant = "default", children, title, spinning
       onMouseEnter={(e) => {
         if (!disabled) {
           e.currentTarget.style.borderColor = variant === "danger" || variant === "shock" ? "#FF4444" : "#666";
-          e.currentTarget.style.color = variant === "danger" || variant === "shock" ? "#FF4444" : "#F0F0F0";
+          e.currentTarget.style.color = variant === "danger" || variant === "shock" ? "#FF7777" : variant === "active" ? "#0D0D0D" : "#F0F0F0";
         }
       }}
       onMouseLeave={(e) => {
@@ -191,7 +193,7 @@ function Btn({ onClick, disabled, variant = "default", children, title, spinning
       }}
     >
       {spinning ? (
-        <span style={{
+        <span aria-hidden="true" style={{
           display: "inline-block",
           width: "10px", height: "10px",
           border: "1.5px solid rgba(255,255,255,0.2)",
@@ -199,7 +201,8 @@ function Btn({ onClick, disabled, variant = "default", children, title, spinning
           borderRadius: "50%",
           animation: "spin 500ms linear infinite",
         }} />
-      ) : children}
+      ) : null}
+      {children}
     </button>
   );
 }
@@ -243,6 +246,7 @@ function ShockBanner({ shock, onDismiss }) {
           {/* Pulse dot */}
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
             <div
+              className="decorative-motion"
               style={{
                 width: "8px",
                 height: "8px",
@@ -284,11 +288,13 @@ function ShockBanner({ shock, onDismiss }) {
           </div>
         </div>
         <button
+          aria-label="Dismiss market shock"
+          className="dashboard-icon-button"
           onClick={handleDismiss}
           style={{
             background: "none",
             border: "none",
-            color: "#666",
+            color: "var(--color-text-2)",
             cursor: "pointer",
             fontSize: "18px",
             lineHeight: 1,
@@ -296,7 +302,7 @@ function ShockBanner({ shock, onDismiss }) {
             flexShrink: 0,
           }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#FF4444"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = "#666"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
         >
           ×
         </button>
@@ -336,17 +342,17 @@ function ChannelTooltip({ channelId, x, y }) {
         {info.what}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "3px", marginBottom: "10px" }}>
-        <div style={{ fontSize: "9px", color: "#666" }}>
+        <div style={{ fontSize: "9px", color: "var(--color-text-2)" }}>
           Click Rate: <span style={{ color: "#C0C0C0" }}>{info.ctr}</span>
         </div>
-        <div style={{ fontSize: "9px", color: "#666" }}>
+        <div style={{ fontSize: "9px", color: "var(--color-text-2)" }}>
           Ad Return: <span style={{ color: "#C0C0C0" }}>{info.roas}</span>
         </div>
-        <div style={{ fontSize: "9px", color: "#666" }}>
+        <div style={{ fontSize: "9px", color: "var(--color-text-2)" }}>
           Acq. Cost: <span style={{ color: "#C0C0C0" }}>{info.cac}</span>
         </div>
       </div>
-      <div style={{ fontSize: "9px", color: "#555", borderTop: "1px solid #1E1E1E", paddingTop: "8px", lineHeight: "1.6" }}>
+      <div style={{ fontSize: "9px", color: "var(--color-text-2)", borderTop: "1px solid #1E1E1E", paddingTop: "8px", lineHeight: "1.6" }}>
         {info.note}
       </div>
     </div>
@@ -355,10 +361,10 @@ function ChannelTooltip({ channelId, x, y }) {
 
 // Full-screen overlay — only shown for multi-day ops (week/month), not for single-day clicks.
 // Single-day (+1 Day) shows an inline spinner inside the button instead.
-function LoadingOverlay({ visible }) {
+function LoadingOverlay({ visible, label = "Simulating..." }) {
   if (!visible) return null;
   return (
-    <div style={{
+    <div role="status" aria-live="polite" style={{
       position: "fixed",
       inset: 0,
       background: "rgba(13,13,13,0.7)",
@@ -378,8 +384,8 @@ function LoadingOverlay({ visible }) {
           animation: "spin 600ms linear infinite",
           margin: "0 auto 16px",
         }} />
-        <p style={{ fontSize: "11px", color: "#666", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-          Simulating...
+        <p style={{ fontSize: "11px", color: "var(--color-text-2)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          {label}
         </p>
       </div>
     </div>
@@ -398,6 +404,7 @@ export default function App() {
   // isLoadingDays: how many days the current simulate call is for.
   // 0 = idle, 1 = +1 Day (inline spinner only), >1 = full overlay for multi-day ops.
   const [isLoadingDays, setIsLoadingDays] = useState(0);
+  const [operationBusy, setOperationBusy] = useState(false);
   const [simulatingLabel, setSimulatingLabel] = useState("");  // inline status text
   const [autoRunning, setAutoRunning] = useState(false);
   const [activeShock, setActiveShock] = useState(null);
@@ -453,11 +460,9 @@ export default function App() {
           setActiveShock(enriched[enriched.length - 1]);  // show most recent
         }
       } catch (e) {
-        // AbortError = 10s timeout fired — backend is running but not responding.
-        // Everything else (TypeError "Failed to fetch") = backend is not running at all.
         const msg = e.name === "AbortError"
-          ? "Backend not responding after 10s. Restart uvicorn on port 8000."
-          : "Backend unreachable. Start: cd backend && uvicorn api:app --reload --port 8000";
+          ? "The simulation service took too long to respond. Reload the page to try again."
+          : "We couldn't connect to the simulation service. Reload the page to try again.";
         setError(msg);
         setShowLanding(false);  // don't block on error — show dashboard with error bar
       }
@@ -477,6 +482,7 @@ export default function App() {
   const fetchAndMerge = useCallback(async () => {
     if (loadingRef.current) return;
     loadingRef.current = true;
+    setOperationBusy(true);
     try {
       const response = await simulate(1, settingsRef.current);
       setResults((prev) => [...prev, ...response.new_rows]);
@@ -494,6 +500,7 @@ export default function App() {
       }
     } finally {
       loadingRef.current = false;
+      setOperationBusy(false);
     }
   }, []);
 
@@ -501,8 +508,9 @@ export default function App() {
   // client-side one day at a time for smooth chart animation. This avoids the latency of
   // making 28+ separate API calls for +1 Month while still giving day-by-day visual updates.
   const handleSimulate = useCallback(async (nDays) => {
-    if (sequentialRunning.current || loadingRef.current || currentDayRef.current >= MAX_DAYS) return;
+    if (sequentialRunning.current || loadingRef.current || currentDayRef.current >= MAX_DAYS) return false;
     sequentialRunning.current = true;
+    setOperationBusy(true);
     const safe = Math.min(nDays, MAX_DAYS - currentDayRef.current);
 
     // Single backend call — backend simulates all days at once.
@@ -518,7 +526,9 @@ export default function App() {
       loadingRef.current = false;
       setIsLoadingDays(0);
       sequentialRunning.current = false;
-      return;
+      setOperationBusy(false);
+      setSimulatingLabel("");
+      return false;
     }
     loadingRef.current = false;
     setIsLoadingDays(0);
@@ -546,6 +556,8 @@ export default function App() {
       if (gapMs > 0 && i < days.length - 1) await new Promise((r) => setTimeout(r, gapMs));
     }
     sequentialRunning.current = false;
+    setOperationBusy(false);
+    return true;
   }, []);
 
   // stopAuto is defined before startAuto so startAuto's closure can reference it.
@@ -558,7 +570,7 @@ export default function App() {
   }, []);
 
   const startAuto = () => {
-    if (autoRunning || currentDayRef.current >= MAX_DAYS) return;
+    if (autoRunning || loadingRef.current || sequentialRunning.current || currentDayRef.current >= MAX_DAYS) return;
     setAutoRunning(true);
     // Use settingsRef.current so we pick up the latest autoIntervalMs without stale closure.
     const ms = settingsRef.current.autoIntervalMs;
@@ -590,38 +602,40 @@ export default function App() {
     }
   }, [settings, autoRunning]);
 
-  // Keyboard shortcuts — Space, →, ←, Shift+→.
-  // Guards: skip when focus is on an input/textarea, or when the tour is active.
-  // Uses refs for all callbacks so the listener never goes stale between tourActive changes.
+  // Shortcuts apply only to the dashboard canvas; focused controls retain native keys.
   useEffect(() => {
     const handler = (e) => {
-      const tag = e.target?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tourActive) return;
-
-      if (e.code === "Space") {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || tourActive || settingsOpen || showLanding !== false) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, button, a, [tabindex], [contenteditable], [role='button']")) return;
+      if (e.code === "Space" && !e.shiftKey) {
         e.preventDefault();
-        handleAutoToggleRef.current();      // always fresh via ref — no stale closure
-      } else if (e.code === "ArrowRight" && e.shiftKey) {
-        setViewDay(currentDayRef.current);
-        viewDayRef.current = currentDayRef.current;
-      } else if (e.code === "ArrowRight") {
-        if (!loadingRef.current && currentDayRef.current < MAX_DAYS) handleSimulate(1);
-      } else if (e.code === "ArrowLeft") {
-        setViewDay((d) => {
-          const next = Math.max(1, d - 1);
-          viewDayRef.current = next;
-          return next;
-        });
+        handleAutoToggleRef.current();
+      } else if (!loadingRef.current && !sequentialRunning.current && !autoRunning) {
+        if (e.code === "ArrowRight" && e.shiftKey) {
+          e.preventDefault();
+          setViewDay(currentDayRef.current);
+          viewDayRef.current = currentDayRef.current;
+        } else if (e.code === "ArrowRight") {
+          e.preventDefault();
+          handleSimulate(1);
+        } else if (e.code === "ArrowLeft" && !e.shiftKey && currentDayRef.current > 0) {
+          e.preventDefault();
+          setViewDay((d) => {
+            const next = Math.max(1, d - 1);
+            viewDayRef.current = next;
+            return next;
+          });
+        }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  // handleSimulate is a stable useCallback — safe to omit. tourActive is the only reactive dep.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tourActive]);
+  }, [tourActive, settingsOpen, showLanding, autoRunning, handleSimulate]);
 
   const handleShock = async () => {
-    if (shockPending || shocksExhausted) return;
+    if (loadingRef.current || sequentialRunning.current || shockPending || shocksExhausted) return;
+    loadingRef.current = true;
+    setOperationBusy(true);
     setShockPending(true);
     try {
       const event = await triggerShock();
@@ -642,10 +656,16 @@ export default function App() {
       }
     } finally {
       setShockPending(false);
+      loadingRef.current = false;
+      setOperationBusy(false);
     }
   };
 
   const handleReset = async () => {
+    if (loadingRef.current || sequentialRunning.current) return;
+    loadingRef.current = true;
+    setOperationBusy(true);
+    setError(null);
     stopAuto();
     setIsLoadingDays(7);  // show overlay during reset
     try {
@@ -665,11 +685,11 @@ export default function App() {
     } catch (e) {
       setError(e.message);
     } finally {
+      loadingRef.current = false;
+      setOperationBusy(false);
       setIsLoadingDays(0);
     }
   };
-
-  const campaignProgress = Math.min((currentDay / MAX_DAYS) * 100, 100);
 
   // Filter results to the slider cursor — enables replay without re-simulating.
   const visibleResults = useMemo(
@@ -715,6 +735,7 @@ export default function App() {
   if (showLanding) {
     return (
       <LandingPage
+        error={error}
         onStart={() => setShowLanding(false)}
         onGetStarted={() => { setTourActive(true); setShowLanding(false); }}
         onSimulate={handleSimulate}
@@ -804,7 +825,7 @@ export default function App() {
       <GuidedTour show={tourActive} onDone={() => setTourActive(false)} />
 
       {/* Full-screen overlay only for multi-day operations (week/month) */}
-      <LoadingOverlay visible={isLoadingDays > 1} />
+      <LoadingOverlay visible={isLoadingDays > 1} label={simulatingLabel || "Resetting simulation..."} />
 
       {/* Channel legend tooltip */}
       {channelTooltip && <ChannelTooltip {...channelTooltip} />}
@@ -819,7 +840,7 @@ export default function App() {
         {/* ----------------------------------------------------------------
             Header
             ---------------------------------------------------------------- */}
-        <header style={{
+        <header className="dashboard-header" style={{
           position: "sticky",
           top: 0,
           zIndex: 100,
@@ -828,7 +849,7 @@ export default function App() {
           borderBottom: "1px solid var(--color-border)",
           padding: "0 32px",
         }}>
-          <div style={{
+          <div className="dashboard-header-inner" style={{
             maxWidth: "1600px",
             margin: "0 auto",
             display: "flex",
@@ -847,7 +868,7 @@ export default function App() {
                 flexShrink: 0,
               }}>
                 {autoRunning && (
-                  <div style={{
+                  <div className="decorative-motion" style={{
                     position: "absolute",
                     inset: "-4px",
                     borderRadius: "50%",
@@ -877,7 +898,7 @@ export default function App() {
                 </div>
                 <div style={{
                   fontSize: "10px",
-                  color: "#555",
+                  color: "var(--color-text-2)",
                   letterSpacing: "0.08em",
                   marginTop: "2px",
                 }}>
@@ -886,8 +907,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* Campaign timeline — progress bar IS the slider */}
-            <div style={{
+            {/* Replay timeline spans the simulated days. */}
+            <div className="dashboard-timeline" style={{
               flex: 1,
               maxWidth: "400px",
               display: "flex",
@@ -896,8 +917,8 @@ export default function App() {
             }}>
               {/* Top row: label + day counter + replay controls */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "10px", color: "#555", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                  Campaign
+                <span style={{ fontSize: "10px", color: "var(--color-text-2)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Campaign · {MAX_DAYS} days
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   {isReplaying && (
@@ -912,26 +933,29 @@ export default function App() {
                         fontFamily: "LetteraMonoLL, monospace",
                       }}>REPLAY</span>
                       <button
+                        className="dashboard-icon-button"
+                        disabled={operationBusy || autoRunning}
                         onClick={() => { setViewDay(currentDay); viewDayRef.current = currentDay; }}
                         style={{
-                          background: "none", border: "1px solid #2A2A2A", color: "#666",
+                          background: "none", border: "1px solid #2A2A2A", color: "var(--color-text-2)",
                           fontSize: "9px", letterSpacing: "0.08em", padding: "2px 7px",
                           borderRadius: "2px", cursor: "pointer", textTransform: "uppercase",
                           fontFamily: "LetteraMonoLL, monospace",
                         }}
                         onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#444"; e.currentTarget.style.color = "#999"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A2A"; e.currentTarget.style.color = "#666"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A2A"; e.currentTarget.style.color = "#A0A0A0"; }}
                       >NOW →</button>
                     </>
                   )}
                   {/* key={currentDay} causes React to re-mount this span on each day change,
                       restarting the CSS animation from 0% every time. */}
                   <span
+                    className="decorative-motion"
                     key={currentDay}
                     style={{
                       fontFamily: "Ndot55, monospace",
                       fontSize: "18px",
-                      color: currentDay === 0 ? "#444" : isReplaying ? "#FF6666" : "#F0F0F0",
+                      color: currentDay === 0 ? "var(--color-text-2)" : isReplaying ? "#FF6666" : "#F0F0F0",
                       letterSpacing: "0.06em",
                       transition: "color 300ms",
                       display: "inline-block",  // required for transform in dayGlow
@@ -944,15 +968,17 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Interactive timeline slider — replaces static progress bar.
-                  Three-zone background: viewed | simulated-not-viewed | unsimulated */}
+              {/* Native range uses all available width for the recorded days. */}
               {currentDay > 0 ? (
                 <input
                   type="range"
                   className="timeline-slider"
                   min={1}
-                  max={MAX_DAYS}
+                  max={currentDay}
                   value={viewDay || 1}
+                  aria-label="Campaign replay day"
+                  aria-valuetext={`Day ${viewDay} of ${currentDay} simulated days`}
+                  disabled={operationBusy || autoRunning}
                   title="Drag to replay past days"
                   onChange={(e) => {
                     // Clamp to simulated days — can't replay what hasn't happened yet.
@@ -963,9 +989,8 @@ export default function App() {
                   style={{
                     width: "100%",
                     background: (() => {
-                      const vPct = (viewDay / MAX_DAYS) * 100;
-                      const cPct = (currentDay / MAX_DAYS) * 100;
-                      if (currentDay >= MAX_DAYS) return "#FF0000";
+                      const vPct = (viewDay / currentDay) * 100;
+                      const cPct = 100;
                       const fillColor = isReplaying ? "#FF4444"
                         : autoRunning ? "#22D3EE" : "#3A3A3A";
                       const simulatedColor = isReplaying ? "rgba(255,68,68,0.18)" : "#232323";
@@ -977,17 +1002,17 @@ export default function App() {
                 <div style={{ height: "2px", background: "#1A1A1A", borderRadius: "1px" }} />
               )}
 
-              {/* Bottom row: D1 ... D183 */}
+              {/* Simulated timeline endpoints */}
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: "9px", color: "#444", fontFamily: "LetteraMonoLL, monospace" }}>D1</span>
-                <span style={{ fontSize: "9px", color: "#444", fontFamily: "LetteraMonoLL, monospace" }}>D{MAX_DAYS}</span>
+                <span style={{ fontSize: "9px", color: "var(--color-text-2)", fontFamily: "LetteraMonoLL, monospace" }}>D1</span>
+                <span style={{ fontSize: "9px", color: "var(--color-text-2)", fontFamily: "LetteraMonoLL, monospace" }}>D{currentDay || MAX_DAYS}</span>
               </div>
             </div>
 
             {/* Controls */}
-            <div data-tour="controls" style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+            <div className="dashboard-controls" data-tour="controls" style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
               {/* Inline status — always occupies space so buttons don't shift on load/idle toggle */}
-              <div style={{
+              <div className="dashboard-status" role="status" aria-live="polite" style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "flex-end",
@@ -1006,7 +1031,7 @@ export default function App() {
                   transition: "opacity 200ms",
                 }} />
                 <span style={{
-                  fontSize: "10px", color: "#555",
+                  fontSize: "10px", color: "var(--color-text-2)",
                   letterSpacing: "0.06em", whiteSpace: "nowrap",
                   fontFamily: "LetteraMonoLL, monospace",
                   opacity: (isLoadingDays > 1 || autoRunning) && simulatingLabel ? 1 : 0,
@@ -1018,7 +1043,7 @@ export default function App() {
               {/* +1 Day: inline spinner instead of full-screen overlay */}
               <Btn
                 onClick={() => handleSimulate(1)}
-                disabled={isLoadingDays > 0 || currentDay >= MAX_DAYS}
+                disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
                 variant="primary"
                 title="Simulate 1 day  [→]"
                 spinning={isLoadingDays === 1}
@@ -1027,7 +1052,7 @@ export default function App() {
               </Btn>
               <Btn
                 onClick={() => handleSimulate(7)}
-                disabled={isLoadingDays > 0 || currentDay >= MAX_DAYS}
+                disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
                 variant="primary"
                 title="Simulate 1 week"
               >
@@ -1035,7 +1060,7 @@ export default function App() {
               </Btn>
               <Btn
                 onClick={() => handleSimulate(30)}
-                disabled={isLoadingDays > 0 || currentDay >= MAX_DAYS}
+                disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
                 variant="primary"
                 title="Simulate 1 month"
               >
@@ -1043,7 +1068,7 @@ export default function App() {
               </Btn>
               <Btn
                 onClick={handleAutoToggle}
-                disabled={currentDay >= MAX_DAYS}
+                disabled={!autoRunning && (operationBusy || currentDay >= MAX_DAYS)}
                 variant={autoRunning ? "active" : "primary"}
                 title="Auto-run — speed set in Settings  [Space]"
               >
@@ -1055,15 +1080,16 @@ export default function App() {
 
               <Btn
                 onClick={handleShock}
-                disabled={isLoadingDays > 0 || shockPending || shocksExhausted}
+                disabled={operationBusy || shocksExhausted}
+                spinning={shockPending}
                 variant="shock"
                 title={shocksExhausted ? "All 10 shock events used — Reset to replay" : "Trigger a random market shock event"}
               >
-                {shockPending ? "..." : shocksExhausted ? "⚡ Exhausted" : "⚡ Shock"}
+                {shocksExhausted ? "⚡ Exhausted" : "⚡ Shock"}
               </Btn>
               <Btn
                 onClick={handleReset}
-                disabled={isLoadingDays > 0}
+                disabled={operationBusy}
                 variant="danger"
                 title="Reset simulation to day 0"
               >
@@ -1074,15 +1100,17 @@ export default function App() {
               <div style={{ width: "1px", height: "24px", background: "#282828" }} />
 
               {/* ? keyboard shortcuts help icon */}
-              <div style={{ position: "relative" }}>
+              <div className="shortcut-help" style={{ position: "relative" }}>
                 <button
+                  className="dashboard-icon-button"
+                  aria-label="Keyboard shortcuts"
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
                     width: "28px", height: "28px",
                     background: "transparent",
                     border: "1px solid #222",
                     borderRadius: "50%", cursor: "pointer",
-                    color: "#555", fontSize: "11px",
+                    color: "var(--color-text-2)", fontSize: "11px",
                     fontFamily: "LetteraMonoLL, monospace",
                     transition: "all 200ms",
                   }}
@@ -1095,7 +1123,7 @@ export default function App() {
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.borderColor = "#222";
-                    e.currentTarget.style.color = "#555";
+                    e.currentTarget.style.color = "#A0A0A0";
                     e.currentTarget.nextSibling.style.opacity = "0";
                   }}
                 >
@@ -1120,7 +1148,7 @@ export default function App() {
                   zIndex: 300,
                   pointerEvents: "none",
                 }}>
-                  <div style={{ color: "#555", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Keyboard Shortcuts</div>
+                  <div style={{ color: "var(--color-text-2)", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Keyboard Shortcuts</div>
                   <div><span style={{ color: "#C0C0C0" }}>Space</span> · ▶/■ Auto play/pause</div>
                   <div><span style={{ color: "#C0C0C0" }}>→</span> · +1 Day</div>
                   <div><span style={{ color: "#C0C0C0" }}>←</span> · Replay back 1 day</div>
@@ -1130,13 +1158,16 @@ export default function App() {
 
               {/* Settings button */}
               <button
+                className="dashboard-icon-button"
+                aria-label="Open settings"
+                aria-expanded={settingsOpen}
                 onClick={() => setSettingsOpen(true)}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: "32px", height: "32px",
                   background: settingsOpen ? "#1E1E1E" : "transparent",
                   border: `1px solid ${settingsOpen ? "#444" : "#282828"}`,
-                  borderRadius: "3px", cursor: "pointer", color: "#666",
+                  borderRadius: "3px", cursor: "pointer", color: "var(--color-text-2)",
                   fontSize: "14px", transition: "all 200ms",
                 }}
                 title="Settings"
@@ -1144,7 +1175,7 @@ export default function App() {
                 onMouseLeave={(e) => {
                   if (!settingsOpen) {
                     e.currentTarget.style.borderColor = "#282828";
-                    e.currentTarget.style.color = "#666";
+                    e.currentTarget.style.color = "#A0A0A0";
                   }
                 }}
               >
@@ -1157,7 +1188,7 @@ export default function App() {
 
         {/* Error bar */}
         {error && (
-          <div style={{
+          <div role="alert" style={{
             background: "rgba(255,0,0,0.08)",
             borderBottom: "1px solid rgba(255,0,0,0.3)",
             padding: "10px 32px",
@@ -1166,20 +1197,21 @@ export default function App() {
             letterSpacing: "0.04em",
           }}>
             {error}
+            <button className="dashboard-button" onClick={() => window.location.reload()} style={{ marginLeft: "16px", padding: "6px 12px", background: "transparent", color: "var(--color-text)", border: "1px solid var(--color-border-2)", font: "inherit" }}>Reload</button>
           </div>
         )}
 
         {/* ----------------------------------------------------------------
             Main content — always rendered; charts show day 0 state when empty
             ---------------------------------------------------------------- */}
-        <main style={{
+        <main className="dashboard-main" style={{
           maxWidth: "1600px",
           margin: "0 auto",
           padding: "32px 32px 0",
         }}>
           {/* Day 0 call-to-action — shown instead of blank charts */}
           {currentDay === 0 && isLoadingDays === 0 && (
-            <div style={{
+            <div className="dashboard-empty-state" style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -1193,23 +1225,23 @@ export default function App() {
               <div>
                 <span style={{
                   fontFamily: "Ndot55, monospace", fontSize: "13px",
-                  color: "#444", letterSpacing: "0.08em",
+                  color: "var(--color-text-2)", letterSpacing: "0.08em",
                 }}>
                   DAY 0 · AWAITING SIMULATION
                 </span>
-                <span style={{ fontSize: "11px", color: "#333", marginLeft: "16px" }}>
+                <span style={{ fontSize: "11px", color: "var(--color-text-2)", marginLeft: "16px" }}>
                   All metrics at baseline. Click +1 Day or ▶ Auto to begin.
                 </span>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
-                <Btn onClick={() => handleSimulate(1)} variant="primary">+1 Day</Btn>
-                <Btn onClick={handleAutoToggle} variant="primary">▶ Auto</Btn>
+                <Btn onClick={() => handleSimulate(1)} disabled={operationBusy || autoRunning} variant="primary">+1 Day</Btn>
+                <Btn onClick={handleAutoToggle} disabled={operationBusy || autoRunning} variant="primary">▶ Auto</Btn>
               </div>
             </div>
           )}
 
             {/* Channel legend — shared across all charts */}
-            <div style={{
+            <div className="dashboard-legend" style={{
               display: "flex",
               gap: "20px",
               flexWrap: "wrap",
@@ -1220,7 +1252,7 @@ export default function App() {
               borderRadius: "4px",
               alignItems: "center",
             }}>
-              <span style={{ fontSize: "10px", color: "#555", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              <span style={{ fontSize: "10px", color: "var(--color-text-2)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                 Channels
               </span>
               {Object.entries(CHANNEL_NAMES).map(([id, name]) => (
@@ -1273,7 +1305,7 @@ export default function App() {
               data-tour="allocation-grid"
               style={{
                 fontSize: "10px",
-                color: "#555",
+                color: "var(--color-text-2)",
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
                 marginBottom: "12px",
@@ -1284,7 +1316,7 @@ export default function App() {
             </div>
 
             {/* 3-column grid — one column per objective */}
-            <div style={{
+            <div className="objective-grid" style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr 1fr",
               gap: "1px",
@@ -1311,17 +1343,17 @@ export default function App() {
                         {OBJECTIVE_SHORT[obj]}
                       </span>
                     </div>
-                    <div style={{ fontSize: "11px", color: "#555", marginTop: "3px" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text-2)", marginTop: "3px" }}>
                       {OBJECTIVE_LABELS[obj]}
                     </div>
-                    <div style={{ fontSize: "10px", color: "#5A5A5A", marginTop: "2px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--color-text-2)", marginTop: "2px" }}>
                       {OBJECTIVE_DESCRIPTIONS[obj]}
                     </div>
                   </div>
 
                   {/* Budget allocation chart */}
                   <div style={{ padding: "16px 20px 0" }}>
-                    <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--color-text-2)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
                       Budget Allocation
                     </div>
                     <BudgetAllocationChart
@@ -1334,10 +1366,10 @@ export default function App() {
 
                   {/* Bandit vs static chart */}
                   <div style={{ padding: "0 20px 20px" }}>
-                    <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px", marginTop: "20px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--color-text-2)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px", marginTop: "20px" }}>
                       Bandit vs Static
                       {/* Inline metric descriptor — one per objective column */}
-                      <span style={{ color: "#444", textTransform: "none", letterSpacing: 0, marginLeft: "6px", fontSize: "9px" }}>
+                      <span style={{ color: "var(--color-text-2)", textTransform: "none", letterSpacing: 0, marginLeft: "6px", fontSize: "9px" }}>
                         — running {obj === "cac" ? "CAC" : obj === "roas" ? "ROAS" : "avg CTR"} (cumulative)
                       </span>
                     </div>
@@ -1358,7 +1390,7 @@ export default function App() {
                 data-tour="business-outcomes"
                 style={{
                   fontSize: "10px",
-                  color: "#555",
+                  color: "var(--color-text-2)",
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   marginBottom: "16px",
@@ -1377,7 +1409,7 @@ export default function App() {
             <section style={{ marginBottom: "32px" }}>
               <div style={{
                 fontSize: "10px",
-                color: "#555",
+                color: "var(--color-text-2)",
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
                 marginBottom: "4px",
@@ -1388,7 +1420,7 @@ export default function App() {
               {/* Interpretation note */}
               <p style={{
                 fontSize: "11px",
-                color: "#5A5A5A",
+                color: "var(--color-text-2)",
                 marginBottom: "16px",
                 paddingLeft: "2px",
                 lineHeight: "1.7",
@@ -1398,12 +1430,12 @@ export default function App() {
                 A <span style={{ color: "#888" }}>flat wide curve</span> = still exploring (few observations).
                 The dashed line marks the distribution mode (most likely true reward rate).
                 Over time, winning channels converge to sharp peaks near 1; losers flatten near 0.
-                {" "}<span style={{ color: "#444" }}>
+                {" "}<span style={{ color: "var(--color-text-2)" }}>
                   The Reward Thresholds in ⚙ Settings control what counts as a win — raising
                   a threshold makes posteriors flatter and pushes the bandit to explore more.
                 </span>
               </p>
-              <div style={{
+              <div className="confidence-grid" style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr 1fr",
                 gap: "1px",
@@ -1424,9 +1456,9 @@ export default function App() {
                       alignItems: "center",
                       gap: "8px",
                     }}>
-                      <span style={{ color: "#444" }}>Beta(α,β) ·</span>
+                      <span style={{ color: "var(--color-text-2)" }}>Beta(α,β) ·</span>
                       <span>{OBJECTIVE_SHORT[obj]}</span>
-                      <span style={{ color: "#333", fontFamily: "LetteraMonoLL, monospace", fontSize: "10px" }}>
+                      <span style={{ color: "var(--color-text-2)", fontFamily: "LetteraMonoLL, monospace", fontSize: "10px" }}>
                         — {OBJECTIVE_LABELS[obj]}
                       </span>
                     </div>

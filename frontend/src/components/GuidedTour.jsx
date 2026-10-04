@@ -16,8 +16,38 @@
  * Outputs: React portal overlay rendered into document.body
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+function useTourDialog(onClose) {
+  const ref = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    ref.current?.focus();
+    const handleKey = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+      }
+      if (event.key !== "Tab") return;
+      const controls = [...ref.current.querySelectorAll("button:not([disabled])")];
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !controls.includes(active))) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && (active === last || !controls.includes(active))) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, []);
+  return ref;
+}
 
 // ---------------------------------------------------------------------------
 // User Guide slide definitions
@@ -185,23 +215,25 @@ const PADDING = 14;
 const btnSecondary = {
   background:    "none",
   border:        "none",
-  color:         "#444",
-  fontSize:      "10px",
+  color:         "#A0A0A0",
+  fontSize:      "12px",
   letterSpacing: "0.07em",
   textTransform: "uppercase",
   cursor:        "pointer",
   fontFamily:    "LetteraMonoLL, monospace",
-  padding:       0,
+  padding:       "8px 0",
+  minHeight:     "44px",
   transition:    "color 150ms",
 };
 
 const btnPrimary = {
   padding:       "9px 22px",
+  minHeight:     "44px",
   background:    "#1A1A1A",
   border:        "1px solid #444",
   borderRadius:  "3px",
   color:         "#F0F0F0",
-  fontSize:      "11px",
+  fontSize:      "12px",
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   cursor:        "pointer",
@@ -214,7 +246,15 @@ const btnPrimary = {
 // ---------------------------------------------------------------------------
 
 function UserGuide({ onDone, onSkip }) {
+  const dialogRef = useTourDialog(onSkip);
   const [slide, setSlide] = useState(0);
+  const previousSlide = useRef(slide);
+  useEffect(() => {
+    if (previousSlide.current === slide) return;
+    previousSlide.current = slide;
+    dialogRef.current.scrollTop = 0;
+    dialogRef.current.querySelector("#guide-title").focus({ preventScroll: true });
+  }, [slide, dialogRef]);
   const total = GUIDE_SLIDES.length;
   const current = GUIDE_SLIDES[slide];
   const isLast  = slide === total - 1;
@@ -238,13 +278,18 @@ function UserGuide({ onDone, onSkip }) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Guide card — onWheel stopPropagation lets trackpad scroll inside
-            the card without triggering the page-scroll blocker on window */}
+        {/* Guide content scrolls independently of the dashboard. */}
         <div
-          onWheel={(e) => e.stopPropagation()}
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="guide-title"
+          tabIndex={-1}
           style={{
-            width:        "540px",
-            maxHeight:    "88vh",
+            width:        "min(540px, calc(100vw - 32px))",
+            boxSizing:    "border-box",
+            maxHeight:    "calc(100dvh - 32px)",
+            overscrollBehavior: "contain",
             overflowY:    "auto",
             background:   "#141414",
             border:       "1px solid #2A2A2A",
@@ -266,12 +311,12 @@ function UserGuide({ onDone, onSkip }) {
             {/* Brand */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--color-accent)", flexShrink: 0 }} />
-              <span style={{ fontFamily: "Ndot55, monospace", fontSize: "11px", color: "#666", letterSpacing: "0.12em" }}>
+              <span style={{ fontFamily: "Ndot55, monospace", fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.12em" }}>
                 NOTHING BANDIT™
               </span>
             </div>
             {/* Tag */}
-            <span style={{ fontSize: "9px", color: "#444", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+            <span style={{ fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.12em", textTransform: "uppercase" }}>
               USER GUIDE
             </span>
           </div>
@@ -291,7 +336,9 @@ function UserGuide({ onDone, onSkip }) {
             </div>
 
             {/* Slide title */}
-            <div style={{
+            <h2 id="guide-title" tabIndex={-1} aria-live="polite" style={{
+              marginTop: 0,
+              fontWeight: "normal",
               fontFamily:    "Ndot55, monospace",
               fontSize:      "16px",
               color:         "#F0F0F0",
@@ -301,19 +348,19 @@ function UserGuide({ onDone, onSkip }) {
               lineHeight:    1.3,
             }}>
               {current.title}
-            </div>
+            </h2>
 
             {/* Two-column layout for Real vs Simulated slide */}
             {current.twoCol ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(190px, 100%), 1fr))", gap: "20px", marginBottom: "20px" }}>
                 {/* Real column */}
                 <div>
-                  <div style={{ fontSize: "9px", color: "var(--color-positive)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px", display: "flex", alignItems: "center", gap: "5px" }}>
+                  <div style={{ fontSize: "11px", color: "var(--color-positive)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px", display: "flex", alignItems: "center", gap: "5px" }}>
                     <span style={{ fontSize: "11px" }}>✓</span> Real
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
                     {current.real.map((item, i) => (
-                      <li key={i} style={{ display: "flex", gap: "7px", fontSize: "10px", color: "#888", lineHeight: "1.5" }}>
+                      <li key={i} style={{ display: "flex", gap: "7px", fontSize: "12px", color: "#A0A0A0", lineHeight: "1.5" }}>
                         <span style={{ color: "var(--color-positive)", flexShrink: 0, marginTop: "1px" }}>—</span>
                         {item}
                       </li>
@@ -323,13 +370,13 @@ function UserGuide({ onDone, onSkip }) {
 
                 {/* Simulated column */}
                 <div>
-                  <div style={{ fontSize: "9px", color: "#888", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px", display: "flex", alignItems: "center", gap: "5px" }}>
+                  <div style={{ fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px", display: "flex", alignItems: "center", gap: "5px" }}>
                     <span style={{ fontSize: "11px" }}>~</span> Simulated
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
                     {current.simulated.map((item, i) => (
-                      <li key={i} style={{ display: "flex", gap: "7px", fontSize: "10px", color: "#666", lineHeight: "1.5" }}>
-                        <span style={{ color: "#444", flexShrink: 0, marginTop: "1px" }}>—</span>
+                      <li key={i} style={{ display: "flex", gap: "7px", fontSize: "12px", color: "#A0A0A0", lineHeight: "1.5" }}>
+                        <span style={{ color: "#A0A0A0", flexShrink: 0, marginTop: "1px" }}>—</span>
                         {item}
                       </li>
                     ))}
@@ -340,8 +387,8 @@ function UserGuide({ onDone, onSkip }) {
               /* Standard bullet list for all other slides */
               <ul style={{ margin: "0 0 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "13px", marginBottom: "20px" }}>
                 {current.body.map((b, i) => (
-                  <li key={i} style={{ display: "flex", gap: "10px", fontSize: "11px", color: "#888", lineHeight: "1.6" }}>
-                    <span style={{ color: "#444", flexShrink: 0, marginTop: "1px" }}>—</span>
+                  <li key={i} style={{ display: "flex", gap: "10px", fontSize: "12px", color: "#A0A0A0", lineHeight: "1.6" }}>
+                    <span style={{ color: "#A0A0A0", flexShrink: 0, marginTop: "1px" }}>—</span>
                     <span>
                       <strong style={{ color: "#C0C0C0", fontWeight: "600" }}>{b.bold}:</strong>
                       {" "}{b.text}
@@ -357,8 +404,8 @@ function UserGuide({ onDone, onSkip }) {
                 padding:      "10px 14px",
                 background:   "rgba(255,255,255,0.02)",
                 borderLeft:   "2px solid #333",
-                fontSize:     "10px",
-                color:        "#555",
+                fontSize:     "12px",
+                color:        "#A0A0A0",
                 lineHeight:   "1.6",
                 marginBottom: "4px",
                 marginTop:    current.twoCol ? "0" : "-6px",
@@ -374,6 +421,8 @@ function UserGuide({ onDone, onSkip }) {
             alignItems:     "center",
             justifyContent: "space-between",
             padding:        "14px 28px 20px",
+            flexWrap:       "wrap",
+            gap:            "16px",
             borderTop:      "1px solid #1A1A1A",
           }}>
             {/* Progress dots */}
@@ -383,35 +432,46 @@ function UserGuide({ onDone, onSkip }) {
                   key={i}
                   onClick={() => setSlide(i)}
                   style={{
-                    width:        i === slide ? "14px" : "6px",
-                    height:       "6px",
+                    width:        "24px",
+                    height:       "24px",
                     borderRadius: "3px",
-                    background:   i === slide ? "var(--color-accent)" : "#2A2A2A",
+                    background:   "transparent",
+                    display:      "grid",
+                    placeItems:   "center",
                     border:       "none",
                     cursor:       "pointer",
                     padding:      0,
                     transition:   "all 250ms ease",
                     flexShrink:   0,
                   }}
+                  aria-label={`Go to slide ${i + 1}`}
+                  aria-current={i === slide ? "step" : undefined}
                   title={`Slide ${i + 1}`}
-                />
+                >
+                  <span aria-hidden="true" style={{
+                    width: i === slide ? "14px" : "6px",
+                    height: "6px",
+                    borderRadius: "3px",
+                    background: i === slide ? "var(--color-accent)" : "#555",
+                  }} />
+                </button>
               ))}
             </div>
 
             {/* Navigation buttons */}
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
               <button
                 onClick={onSkip}
                 style={{
                   ...btnSecondary,
-                  color:         "#666",
+                  color:         "#A0A0A0",
                   border:        "1px solid #2A2A2A",
                   borderRadius:  "3px",
                   padding:       "7px 14px",
-                  fontSize:      "10px",
+                  fontSize:      "12px",
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = "#C0C0C0"; e.currentTarget.style.borderColor = "#555"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#666";    e.currentTarget.style.borderColor = "#2A2A2A"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "#A0A0A0";    e.currentTarget.style.borderColor = "#2A2A2A"; }}
               >
                 Skip to Dashboard →
               </button>
@@ -419,9 +479,9 @@ function UserGuide({ onDone, onSkip }) {
               {slide > 0 && (
                 <button
                   onClick={() => setSlide((s) => s - 1)}
-                  style={{ ...btnSecondary, color: "#555" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "#888"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "#555"; }}
+                  style={{ ...btnSecondary, color: "#A0A0A0" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
                 >
                   ← Back
                 </button>
@@ -453,24 +513,34 @@ function UserGuide({ onDone, onSkip }) {
  * The "hole" is created by a transparent <div> positioned exactly over the target
  * element. A massive box-shadow (0 0 0 9999px rgba(0,0,0,0.82)) fills everything
  * OUTSIDE that div with a dark overlay. The div itself is transparent — the
- * element underneath stays fully visible and interactive.
+ * element underneath stays fully visible while the tour owns interaction.
  */
 function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
-  if (!rect) return null;
+  const dialogRef = useTourDialog(onSkip);
+  const [tipHeight, setTipHeight] = useState(0);
+  useLayoutEffect(() => {
+    const observer = new ResizeObserver(() => {
+      setTipHeight(dialogRef.current.getBoundingClientRect().height);
+    });
+    observer.observe(dialogRef.current);
+    return () => observer.disconnect();
+  }, [dialogRef]);
 
-  const boxLeft   = rect.left   - PADDING;
-  const boxTop    = rect.top    - PADDING;
-  const boxWidth  = rect.width  + PADDING * 2;
-  const boxHeight = rect.height + PADDING * 2;
-
-  const isBottom = step.position === "bottom";
-  const tipLeft  = Math.max(16, Math.min(
-    window.innerWidth - 336,
-    boxLeft + boxWidth / 2 - 160,
+  const boxLeft = (rect?.left ?? 0) - PADDING;
+  const boxTop = (rect?.top ?? 0) - PADDING;
+  const boxWidth = (rect?.width ?? 0) + PADDING * 2;
+  const boxHeight = (rect?.height ?? 0) + PADDING * 2;
+  const tipWidth = Math.min(360, window.innerWidth - 32);
+  const tipLeft = Math.max(16, Math.min(
+    window.innerWidth - tipWidth - 16,
+    boxLeft + boxWidth / 2 - tipWidth / 2,
   ));
-  const tipStyle = isBottom
-    ? { top:  `${boxTop + boxHeight + 16}px`, left: `${tipLeft}px` }
-    : { top:  `${boxTop - 16}px`,             left: `${tipLeft}px`, transform: "translateY(-100%)" };
+  const desiredTop = rect
+    ? (step.position === "bottom" ? boxTop + boxHeight + 16 : boxTop - tipHeight - 16)
+    : (window.innerHeight - tipHeight) / 2;
+  // Tall dashboard targets leave no outside space; keep navigation inside the viewport.
+  const tipTop = Math.max(16, Math.min(desiredTop, window.innerHeight - tipHeight - 16));
+  const tipStyle = { top: `${tipTop}px`, left: `${tipLeft}px` };
 
   return createPortal(
     <>
@@ -481,7 +551,7 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
       />
 
       {/* Spotlight cutout */}
-      <div
+      {rect && <div
         style={{
           position:      "fixed",
           left:          `${boxLeft}px`,
@@ -500,14 +570,23 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
             "height 360ms cubic-bezier(0.22,1,0.36,1)",
           ].join(", "),
         }}
-      />
+      />}
 
       {/* Tooltip callout */}
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tour-title"
+        tabIndex={-1}
         style={{
           position:      "fixed",
           zIndex:        9002,
-          width:         "320px",
+          width:         `${tipWidth}px`,
+          boxSizing:     "border-box",
+          maxHeight:     "calc(100dvh - 32px)",
+          overflowY:     "auto",
+          overscrollBehavior: "contain",
           ...tipStyle,
           background:    "#161616",
           border:        "1px solid #2A2A2A",
@@ -521,12 +600,14 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Step counter */}
-        <div style={{ fontSize: "9px", color: "#444", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "10px" }}>
+        <div style={{ fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "10px" }}>
           {stepIndex + 1} / {totalSteps}
         </div>
 
         {/* Title */}
-        <div style={{
+        <h2 id="tour-title" aria-live="polite" style={{
+          marginTop: 0,
+          fontWeight: "normal",
           fontFamily:    "Ndot55, monospace",
           fontSize:      "13px",
           color:         "#F0F0F0",
@@ -536,13 +617,13 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
           lineHeight:    1.3,
         }}>
           {step.title}
-        </div>
+        </h2>
 
         {/* Bullets */}
         <ul style={{ margin: "0 0 20px 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
           {step.bullets.map((b, i) => (
-            <li key={i} style={{ fontSize: "11px", color: "#888", lineHeight: "1.5", display: "flex", gap: "8px" }}>
-              <span style={{ color: "#555", flexShrink: 0 }}>—</span>
+            <li key={i} style={{ fontSize: "12px", color: "#A0A0A0", lineHeight: "1.5", display: "flex", gap: "8px" }}>
+              <span style={{ color: "#A0A0A0", flexShrink: 0 }}>—</span>
               <span>
                 <strong style={{ color: "#C0C0C0", fontWeight: "600" }}>"{b.bold}"</strong>
                 {" "}{b.text}
@@ -556,8 +637,8 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
           <button
             onClick={onSkip}
             style={btnSecondary}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "#888"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = "#444"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
           >
             Skip Tour
           </button>
@@ -605,20 +686,19 @@ export default function GuidedTour({ show, onDone }) {
     }
   }, [show]);
 
-  // Block user-initiated scrolling while the tour is active.
-  useEffect(() => {
+  // Portal content remains scrollable while the dashboard is inert.
+  useLayoutEffect(() => {
     if (!show) return;
-    const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
-    const blockWheel = (e) => e.preventDefault();
-    const blockTouch = (e) => e.preventDefault();
-    const blockKeys  = (e) => { if (SCROLL_KEYS.has(e.key)) e.preventDefault(); };
-    window.addEventListener("wheel",     blockWheel, { passive: false });
-    window.addEventListener("touchmove", blockTouch, { passive: false });
-    window.addEventListener("keydown",   blockKeys);
+    const root = document.getElementById("root");
+    const previousInert = root?.inert;
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement;
+    if (root) root.inert = true;
+    document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener("wheel",     blockWheel);
-      window.removeEventListener("touchmove", blockTouch);
-      window.removeEventListener("keydown",   blockKeys);
+      if (root) root.inert = previousInert;
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [show]);
 
@@ -648,7 +728,8 @@ export default function GuidedTour({ show, onDone }) {
     const target = STEPS[stepIndex]?.target;
     const el = document.querySelector(`[data-tour="${target}"]`);
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
     const t = setTimeout(measureTarget, 450);
     return () => clearTimeout(t);
   }, [show, phase, stepIndex, measureTarget]);
