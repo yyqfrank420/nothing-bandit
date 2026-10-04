@@ -91,6 +91,25 @@ class ShockHistoryTests(unittest.TestCase):
         self.assertEqual(database.get_shocks()[0]["affected_channel_ids"], [2])
         self.assertEqual(database.get_triggered_shock_names(), {"first", "second"})
 
+    def test_restored_event_uses_catalog_copy_without_changing_snapshot(self):
+        event = api.SHOCK_EVENTS[0]
+        database.insert_shock(event["name"], "Stored old copy", event["affected_channel_ids"], event["multipliers"], 3, 0)
+        restored = api.state()["shock_events"][0]
+        self.assertEqual(restored["description"], event["description"])
+        self.assertEqual(restored["affected_channel_ids"], event["affected_channel_ids"])
+        self.assertEqual(restored["multipliers"], event["multipliers"])
+        self.assertEqual((restored["start_day"], restored["end_day"]), (1, 3))
+        self.assertEqual(database.get_shocks(active_only=False)[0]["description"], "Stored old copy")
+
+    def test_same_name_with_different_parameters_keeps_stored_copy(self):
+        event = api.SHOCK_EVENTS[0]
+        database.insert_shock(event["name"], "Stored variant copy", [6], {"roas": 0.8}, 3, 0)
+        self.assertEqual(api.state()["shock_events"][0]["description"], "Stored variant copy")
+
+    def test_unknown_event_keeps_stored_copy(self):
+        database.insert_shock("Unknown event", "Stored custom copy", [1], {"ctr": 0.5}, 2, 0)
+        self.assertEqual(api.state()["shock_events"][0]["description"], "Stored custom copy")
+
     def test_endpoint_shapes_preserve_existing_fields(self):
         snapshot = api.state()
         self.assertEqual(set(snapshot), {"results", "bandit_states", "active_shocks", "shock_events", "current_day"})

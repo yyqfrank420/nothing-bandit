@@ -1,29 +1,7 @@
-"""
-File: database.py
-Language: Python
-Purpose: All database schema, seeding, and query helpers.
-         Supports two backends selected by environment variable:
-           - SQLite    (local dev)  — no config needed, writes to bandit.db
-           - PostgreSQL (Vercel)    — set DATABASE_URL env var, uses psycopg2
+"""Database schema, channel seeding, simulation state, and event snapshots.
 
-         Public function signatures are identical for both backends.
-         Internal helpers abstract the three main API differences:
-           1. Connection creation  (sqlite3 vs psycopg2)
-           2. Placeholder style    (? vs %s)
-           3. Upsert syntax        (INSERT OR REPLACE vs ON CONFLICT)
-
-Connects to: api.py, bandit.py, simulator.py
-Inputs:  Channel list (for seeding), row dicts (for inserts)
-Outputs: Rows as plain Python dicts
-
---- How to switch backends ---
-Local (SQLite, default):   no env var needed.
-Vercel (Postgres):         set DATABASE_URL=postgresql://user:pass@host:5432/dbname
-                           Add psycopg2-binary to requirements.txt.
-                           On Vercel: Dashboard → Storage → Create Postgres →
-                           the POSTGRES_URL env var is injected automatically.
-                           Rename it to DATABASE_URL in your vercel.json env block,
-                           or change the lookup below to POSTGRES_URL.
+A configured PostgreSQL URL selects the hosted backend; otherwise SQLite
+stores local data in bandit.db. Public operations support both backends.
 """
 
 import json
@@ -35,7 +13,6 @@ from channels import STATIC_WEIGHTS
 # Strength of the informed prior (equivalent number of pseudo-observations).
 # α_i = w_i × N_PRIOR, β_i = (1 - w_i) × N_PRIOR
 # → E[θ_i] = w_i, so day-1 Thompson samples match static weights in expectation.
-# N=10 washes out in ~20 days once real reward signals accumulate.
 N_PRIOR = 10
 
 # ---------------------------------------------------------------------------
@@ -43,10 +20,10 @@ N_PRIOR = 10
 # ---------------------------------------------------------------------------
 
 # Detect Postgres connection string from several possible env var names:
-#   POSTGRES_URL_NON_POOLING — injected by Vercel Postgres Storage (preferred:
+#   POSTGRES_URL_NON_POOLING; injected by Vercel Postgres Storage (preferred:
 #                               direct connection, avoids pgbouncer prepared-statement limits)
-#   POSTGRES_URL             — pooled variant, also injected by Vercel Postgres
-#   DATABASE_URL             — manually set fallback (Supabase, Neon, etc.)
+#   POSTGRES_URL            ; pooled variant, also injected by Vercel Postgres
+#   DATABASE_URL            ; manually set fallback (Supabase, Neon, etc.)
 DATABASE_URL = (
     os.environ.get("POSTGRES_URL_NON_POOLING") or
     os.environ.get("POSTGRES_URL") or
@@ -54,22 +31,15 @@ DATABASE_URL = (
 )
 USE_POSTGRES  = bool(DATABASE_URL)
 
-# SQLite only — file path relative to this script.
+# SQLite only; file path relative to this script.
 DB_PATH = os.path.join(os.path.dirname(__file__), "bandit.db")
 
 # ---------------------------------------------------------------------------
 # Connection helpers
 # ---------------------------------------------------------------------------
 
-# Module-level connection cache for Postgres.
-# Vercel Python runtimes reuse the same process for multiple requests
-# (typically for 5–10 minutes). By reusing one persistent connection we pay
-# the TCP + TLS + Postgres handshake cost once (~600ms London→Ohio), not once
-# per DB call. Subsequent queries within the same process run in ~5–10ms.
-#
-# Safety: _connect() checks conn.closed and conn.status before reusing.
-# If the connection is dead (e.g. Neon killed it after inactivity), a fresh
-# one is opened transparently. SQLite is always opened fresh (cheap local file).
+# Reuse the PostgreSQL connection while it remains open and idle.
+# SQLite operations open and close their own connections.
 _pg_conn = None
 
 
@@ -103,7 +73,7 @@ def _release(conn) -> None:
     """
     Release a connection after use.
 
-    Postgres: no-op — autocommit is enabled so writes committed immediately,
+    Postgres: no-op; autocommit is enabled so writes committed immediately,
               and the connection stays open in the module-level cache.
     SQLite:   commit and close (fresh connection per call, cheap to reopen).
     """
@@ -156,7 +126,7 @@ def _fetchone(cur):
 
 
 # ---------------------------------------------------------------------------
-# Schema DDL — two versions (backends differ on AUTOINCREMENT syntax)
+# Schema DDL; two versions (backends differ on AUTOINCREMENT syntax)
 # ---------------------------------------------------------------------------
 
 _CREATE_CHANNELS = """
@@ -230,7 +200,7 @@ else:
 
 def setup_database(channels: list) -> None:
     """
-    Create all tables and seed static data. Safe to call on every startup —
+    Create all tables and seed static data. Safe to call on every startup;
     all inserts use ON CONFLICT / INSERT OR IGNORE so duplicates are skipped.
     """
     conn = _connect()
@@ -239,13 +209,13 @@ def setup_database(channels: list) -> None:
     _exec(conn, _CREATE_BANDIT_STATE)
     _exec(conn, _CREATE_ACTIVE_SHOCKS)
 
-    # Build channel params once — used by both backends.
+    # Build channel params once; used by both backends.
     channel_params = [
         (ch["id"], ch["name"], ch["type"], ch["true_ctr"], ch["true_roas"], ch["true_cac"])
         for ch in channels
     ]
 
-    # Build bandit prior params — Beta(w*N, (1-w)*N) informed prior per channel per objective.
+    # Build bandit prior params; Beta(w*N, (1-w)*N) informed prior per channel per objective.
     bandit_params = [
         (ch["id"], obj,
          STATIC_WEIGHTS.get(ch["id"], 1.0 / len(channels)) * N_PRIOR,
@@ -256,7 +226,7 @@ def setup_database(channels: list) -> None:
 
     if USE_POSTGRES:
         # execute_values sends ALL rows as one INSERT ... VALUES (r1),(r2),...
-        # — one round-trip instead of one per row. page_size > row count = single batch.
+        #; one round-trip instead of one per row. page_size > row count = single batch.
         from psycopg2.extras import execute_values
         cur = conn.cursor()
         execute_values(cur, """
@@ -306,7 +276,7 @@ def get_bandit_states_all() -> dict:
     """
     Return {objective: {channel_id: {alpha, beta}}} for ALL objectives in ONE connection.
 
-    Replaces three separate get_bandit_states() calls in run_full_simulation —
+    Replaces three separate get_bandit_states() calls in run_full_simulation;
     cuts DB round-trips from 3 to 1 per simulate call.
     """
     conn = _connect()
@@ -353,7 +323,7 @@ def batch_set_bandit_states(states: dict) -> None:
 
     Used at the end of run_full_simulation when Bayesian decay is applied in-memory.
     Decay modifies the base state each day, so the final values cannot be reconstructed
-    from incremental deltas — we must write the absolute final state.
+    from incremental deltas; we must write the absolute final state.
 
     states format: {objective: {channel_id: {"alpha": float, "beta": float}}}
     """
@@ -415,10 +385,10 @@ def insert_daily_results_batch(rows: list) -> None:
 
     if USE_POSTGRES:
         # execute_values sends ALL rows as one INSERT ... VALUES (r1),(r2),...
-        # — one Postgres round-trip regardless of batch size.
+        #; one Postgres round-trip regardless of batch size.
         # psycopg2's executemany() is NOT batched: it loops internally sending
-        # one round-trip per row, which for 1080 rows (30-day simulate) adds ~10s.
-        # page_size=2000 ensures even a 365-day batch fits in a single statement.
+        # one round-trip per row.
+        # Insert at most 2,000 rows per statement.
         from psycopg2.extras import execute_values
         cur = conn.cursor()
         execute_values(cur, """
@@ -568,8 +538,7 @@ def decrement_shock_durations_by(n: int) -> None:
     Subtract n from days_remaining in ONE query instead of calling
     decrement_shock_durations() n times in a loop.
 
-    Cuts simulate(30) from 30 DB writes down to 1 for shock aging —
-    the biggest single latency win for multi-day batch runs.
+    Ages shock snapshots in one write per batch.
     """
     if n <= 0:
         return

@@ -1,18 +1,7 @@
-/**
- * File: SettingsPanel.jsx
- * Language: JavaScript (React 18)
- * Purpose: Slide-out settings drawer for tuning simulation hyperparameters.
- *          Settings are session-scoped (React state) — they reset on full page reload.
- *          Values are forwarded to the backend with every simulate() call.
- * Connects to: App.jsx (receives settings, onUpdate, onClose props)
- * Inputs:  settings object, open boolean, callbacks
- * Outputs: Renders a slide-in panel; calls onUpdate(newSettings) on change
- */
-
 import React, { useEffect, useRef } from "react";
 import "./SettingsPanel.css";
 
-// Default values mirror channels.py / simulator.py constants.
+// Defaults match channels.py and simulator.py.
 export const DEFAULT_SETTINGS = {
   dailyBudget:    5000,
   noiseSigma:     0.15,
@@ -20,12 +9,8 @@ export const DEFAULT_SETTINGS = {
   rewardRoas:     2.50,
   rewardCac:      160.0,
   autoIntervalMs: 150,
-  decayFactor:    0.95,   // Bayesian forgetting — γ per day (~14-day half-life)
+  decayFactor:    0.95,
 };
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 function SettingRow({ id, label, hint, children }) {
   return (
@@ -59,10 +44,6 @@ function SliderInput({ value, min, max, step, onChange, id, valueText }) {
     />
   );
 }
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 export default function SettingsPanel({ open, settings, onUpdate, onClose, onReset }) {
   const dialogRef = useRef(null);
@@ -118,7 +99,6 @@ export default function SettingsPanel({ open, settings, onUpdate, onClose, onRes
         display: "flex",
         flexDirection: "column",
       }}>
-        {/* Drawer header */}
         <div className="settings-header" style={{
           borderBottom: "1px solid #1E1E1E",
           display: "flex",
@@ -135,10 +115,10 @@ export default function SettingsPanel({ open, settings, onUpdate, onClose, onRes
               color: "#E0E0E0",
               letterSpacing: "0.02em",
             }}>
-              SETTINGS
+              Settings
             </h2>
             <div id="settings-description" style={{ fontSize: "13px", color: "var(--color-text-2)", marginTop: "6px", lineHeight: 1.5 }}>
-              Session-scoped — resets on page reload
+              Settings reset when you reload the page.
             </div>
           </div>
           <button
@@ -153,11 +133,7 @@ export default function SettingsPanel({ open, settings, onUpdate, onClose, onRes
             ×
           </button>
         </div>
-
-        {/* Scrollable content */}
         <div className="settings-content" style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
-
-          {/* Section: Simulation */}
           <h3 className="settings-section-title">
             Simulation
           </h3>
@@ -188,7 +164,7 @@ export default function SettingsPanel({ open, settings, onUpdate, onClose, onRes
               onChange={(v) => set("noiseSigma", v)}
             />
             <div style={{ fontSize: "13px", color: "var(--color-text-2)", marginTop: "6px", lineHeight: "1.5" }}>
-              Gaussian noise applied to each observed metric. Higher = more volatile results.
+              Controls daily variation in channel metrics. Higher values add more variation.
             </div>
           </SettingRow>
 
@@ -208,24 +184,16 @@ export default function SettingsPanel({ open, settings, onUpdate, onClose, onRes
               <span style={{ fontSize: "12px", color: "var(--color-text-2)", fontFamily: "var(--font-mono)" }}>No forget (1.00)</span>
             </div>
             <div style={{ fontSize: "13px", color: "var(--color-text-2)", marginTop: "6px", lineHeight: "1.5" }}>
-              Per-day discount on accumulated evidence. Lower = faster recovery after shocks.
+              Discounts accumulated evidence each day. Lower values give recent results more weight.
               Half-life ≈ {settings.decayFactor >= 1.0 ? "∞" : Math.round(Math.log(0.5) / Math.log(settings.decayFactor))} days.
             </div>
           </SettingRow>
-
-          {/* Section: Reward Thresholds */}
           <h3 className="settings-section-title">
-            Reward Thresholds
+            Reward thresholds
           </h3>
           <div style={{ fontSize: "13px", color: "var(--color-text-2)", marginBottom: "16px", lineHeight: "1.6" }}>
-            A day is counted as a "success" (Alpha +1) when the observed metric beats this
-            threshold. Failures increment Beta. Adjust to change how aggressively the bandit
-            discriminates between channels.
-            {" "}<span style={{ color: "var(--color-text-2)" }}>
-              These thresholds directly shape the Beta posteriors in the Bandit Confidence
-              charts — raise a threshold to make the bandit more selective, producing flatter
-              curves and more exploration across channels.
-            </span>
+            CTR and ROAS count as successes at or above their thresholds. CAC counts at or below its threshold.
+            These results update the confidence curves.
           </div>
 
           <SettingRow id="setting-rewardCtr" label="CTR Threshold" hint={`≥ ${(settings.rewardCtr * 100).toFixed(1)}%`}>
@@ -256,14 +224,9 @@ export default function SettingsPanel({ open, settings, onUpdate, onClose, onRes
               min={50} max={400} step={10}
               onChange={(v) => set("rewardCac", v)}
             />
-            <div style={{ fontSize: "13px", color: "var(--color-text-2)", marginTop: "6px" }}>
-              Lower CAC = better. A channel wins when its CAC is below this threshold.
-            </div>
           </SettingRow>
-
-          {/* Section: Auto Speed */}
           <h3 className="settings-section-title">
-            Auto Speed
+            Auto speed
           </h3>
 
           <SettingRow id="setting-autoIntervalMs"
@@ -287,8 +250,6 @@ export default function SettingsPanel({ open, settings, onUpdate, onClose, onRes
           </SettingRow>
 
         </div>
-
-        {/* Footer */}
         <div className="settings-footer" style={{
           borderTop: "1px solid #1E1E1E",
           flexShrink: 0,

@@ -65,7 +65,7 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate, error }
             onClick={event => dismiss(onGetStarted, event.detail === 0)}
             disabled={loading || leaving}
           >
-            Get Started
+            Read tutorial
           </button>
           <button
             type="button"
@@ -84,7 +84,7 @@ export default function LandingPage({ onStart, onGetStarted, onSimulate, error }
         </div>
         {error && (
           <p role="alert" className="landing-error">
-            {error} Try +1 Day again, or select Get Started.
+            {error}
           </p>
         )}
       </div>

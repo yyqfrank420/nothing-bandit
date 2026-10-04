@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeShock, formatPercent, shockStatus } from "./shockAnalysis.js";
+import { analyzeShock, shockStatus } from "./shockAnalysis.js";
+import { formatPercent } from "../metricFormatting.js";
 
 const shock = { start_day: 8, end_day: 10, triggered_on_day: 7 };
 const row = (day, allocator = "bandit", revenue = 200, spend = 100, channelId = 1, objective = "roas") => ({

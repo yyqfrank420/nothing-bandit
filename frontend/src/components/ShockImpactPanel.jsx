@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { CHANNEL_COLORS, CHANNEL_NAMES } from "../App.jsx";
-import { analyzeShock, formatPercent, shockStatus } from "./shockAnalysis.js";
+import { analyzeShock, shockStatus } from "./shockAnalysis.js";
+import { formatPercent } from "../metricFormatting.js";
 import "./ShockImpactPanel.css";
 
 const METRIC_LABELS = { ctr: "CTR", roas: "ROAS", cac: "CAC" };
