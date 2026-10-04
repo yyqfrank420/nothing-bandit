@@ -7,14 +7,14 @@
    ============================================================ */
 
 /* ------------------------------------------------------------
-   Nothing brand fonts — loaded from GitHub raw CDN (community-preserved)
+   Nothing brand fonts — community-preserved files served with this application
    Ndot-55      : dot-matrix display face → KPI numbers, day counter, chart titles
    LetteraMonoLL: body monospace → labels, descriptions, tooltips
    ============================================================ */
 
 @font-face {
   font-family: "Ndot55";
-  src: url("https://raw.githubusercontent.com/xeji01/nothingfont/main/fonts/Ndot55-Regular.otf")
+  src: url("/fonts/Ndot55-Regular.otf")
     format("opentype");
   font-weight: 400;
   font-style: normal;
@@ -23,7 +23,7 @@
 
 @font-face {
   font-family: "LetteraMonoLL";
-  src: url("https://raw.githubusercontent.com/xeji01/nothingfont/main/fonts/LetteraMonoLL-Regular.otf")
+  src: url("/fonts/LetteraMonoLL-Regular.otf")
     format("opentype");
   font-weight: 400;
   font-style: normal;
@@ -32,7 +32,7 @@
 
 @font-face {
   font-family: "LetteraMonoLL";
-  src: url("https://raw.githubusercontent.com/xeji01/nothingfont/main/fonts/LetteraMonoLL-Light.otf")
+  src: url("/fonts/LetteraMonoLL-Light.otf")
     format("opentype");
   font-weight: 300;
   font-style: normal;
@@ -41,7 +41,7 @@
 
 @font-face {
   font-family: "NType82";
-  src: url("https://raw.githubusercontent.com/xeji01/nothingfont/main/fonts/NType82-Regular.otf")
+  src: url("/fonts/NType82-Regular.otf")
     format("opentype");
   font-weight: 400;
   font-style: normal;
@@ -52,6 +52,12 @@
    Nothing colour palette
    ============================================================ */
 :root {
+  --font-display: "Ndot55", monospace;
+  --font-heading: "Ndot55", monospace;
+  --font-body: "LetteraMonoLL", "Courier New", monospace;
+  --font-mono: "LetteraMonoLL", "Courier New", monospace;
+  color-scheme: dark;
+
   /* Core surfaces */
   --color-bg:        #0D0D0D;
   --color-surface:   #141414;
@@ -77,9 +83,9 @@
   --color-warning:      #F97316;   /* caution */
 
   /* Channel colours — carefully chosen for legibility on dark bg */
-  --ch-1: #4ECDC4;   /* Tech KOL       — teal */
+  --ch-1: #F97316;   /* Tech KOL */
   --ch-2: #A78BFA;   /* Design KOL     — violet */
-  --ch-3: #F97316;   /* Generic KOL    — orange */
+  --ch-3: #4ECDC4;   /* Generic KOL */
   --ch-4: #E879A0;   /* Instagram Ads  — pink */
   --ch-5: #22D3EE;   /* TikTok Ads     — cyan */
   --ch-6: #4ADE80;   /* Google Search  — green */
@@ -117,7 +123,7 @@ html {
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
-  font-family: "LetteraMonoLL", "Space Mono", "Courier New", monospace;
+  font-family: var(--font-body);
   font-weight: 400;
   line-height: 1.5;
   min-height: 100vh;
@@ -127,12 +133,12 @@ body {
    Typography helpers
    ============================================================ */
 .font-display {
-  font-family: "Ndot55", monospace;
+  font-family: var(--font-display);
   letter-spacing: 0.04em;
 }
 
 .font-heading {
-  font-family: "NType82", "LetteraMonoLL", monospace;
+  font-family: var(--font-heading);
   letter-spacing: 0.02em;
 }
 
@@ -207,21 +213,8 @@ body::before {
   animation: slideUp 250ms var(--ease-out);
 }
 
-/* ------------------------------------------------------------
-   Shock event pulse ring
-   ============================================================ */
-@keyframes shockRing {
-  0%   { transform: scale(1);   opacity: 0.8; }
-  100% { transform: scale(2.5); opacity: 0; }
-}
-
-/* ------------------------------------------------------------
-   Auto mode progress bar shimmer
-   ============================================================ */
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
+/* Shared shock impact entrance retains feedback without spatial movement. */
+@keyframes fadeIn { from { opacity: 0.6; } to { opacity: 1; } }
 
 /* ------------------------------------------------------------
    Chart tooltip fade
@@ -230,61 +223,124 @@ body::before {
   transition: opacity 120ms ease;
 }
 
-/* Dashboard composition follows available chart width, including intermediate screens. */
+/* Shared dashboard controls and typography. */
 button:focus-visible, a:focus-visible, input:focus-visible,
 select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--color-text) !important;
   outline-offset: 4px;
 }
 input, textarea { caret-color: var(--color-accent); }
-.dashboard-button { min-height: 44px; justify-content: center; }
-.dashboard-icon-button { min-width: 44px; min-height: 44px; }
-.dashboard-timeline { min-width: 160px; }
-.objective-grid > div, .confidence-grid > div { min-width: 0; }
-.shortcut-help:focus-within > div { opacity: 1 !important; }
 button:disabled, input:disabled { cursor: not-allowed; }
-.timeline-slider { min-height: 24px; background-size: 100% 2px !important; background-repeat: no-repeat !important; background-position: center !important; }
-@media (max-width: 1400px) {
-  .dashboard-header-inner { height: auto !important; min-height: 60px; flex-wrap: wrap; gap: 16px !important; padding: 16px 0; }
-  .dashboard-timeline { margin-left: auto; }
-  .dashboard-controls { flex-wrap: wrap; flex-basis: 100%; }
-  .dashboard-status { width: auto !important; margin-left: auto; order: 1; }
+.dashboard-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 10px 16px; border: 1px solid var(--color-border-2);
+  border-radius: 4px; background: transparent; color: var(--color-text-2);
+  font: 12px/1.2 var(--font-mono); white-space: nowrap; cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.dashboard-button--primary { background: var(--color-surface-2); border-color: #444; color: var(--color-text); }
+.dashboard-button--danger { color: var(--color-negative); }
+.dashboard-button--shock { background: var(--color-accent-dim); border-color: #663333; color: var(--color-negative); }
+.dashboard-button--active { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-bg); }
+.dashboard-button:disabled { opacity: .45; }
+.dashboard-icon-button { min-width: 44px; min-height: 44px; }
+.dashboard-button:not(:disabled):not(:focus-visible) { transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 120ms var(--ease-out); }
+.dashboard-button:not(:disabled):not(:focus-visible):active { transform: scale(.98); }
+.loading-spinner { width: 12px; height: 12px; flex: 0 0 12px; border: 1.5px solid #555; border-top-color: currentColor; border-radius: 50%; animation: spin 500ms linear infinite; }
+.loading-spinner--large { display: block; width: 32px; height: 32px; border-width: 2px; border-top-color: var(--color-accent); margin: 0 auto 16px; }
+.skip-link { position: fixed; top: 12px; left: 16px; z-index: 2000; padding: 12px 16px; background: var(--color-text); color: var(--color-bg); transform: translateY(-160%); }
+.skip-link:focus { transform: none; }
+.dashboard-header { position: sticky; top: 0; z-index: 100; background: var(--color-bg); border-bottom: 1px solid var(--color-border); padding: 0 32px; }
+.dashboard-header-inner { max-width: 1536px; margin: 0 auto; }
+.dashboard-masthead { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(320px, 560px); gap: 40px; align-items: center; padding: 24px 0 16px; }
+.dashboard-brand { display: flex; align-items: center; gap: 16px; }
+.brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-accent); flex-shrink: 0; }
+.dashboard-brand h1 { font: 24px/1.15 var(--font-display); color: var(--color-text); }
+.dashboard-brand p { margin-top: 7px; font: 13px/1.4 var(--font-body); color: var(--color-text-2); }
+.dashboard-timeline { min-width: 0; }
+.timeline-heading, .timeline-current, .timeline-endpoints { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.timeline-current { justify-content: flex-end; }
+.timeline-label, .timeline-endpoints { font: 11px/1.4 var(--font-mono); color: var(--color-text-2); }
+.timeline-day { font: 22px/1 var(--font-display); white-space: nowrap; }
+.replay-label { font: 11px/1 var(--font-mono); color: var(--color-negative); }
+.timeline-now { padding: 8px 10px; }
+.timeline-slider { appearance: none; width: 100%; height: 44px; background-color: transparent; background-size: 100% 2px; background-repeat: no-repeat; background-position: center; cursor: pointer; }
+.timeline-slider::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--color-accent); }
+.timeline-slider::-moz-range-thumb { width: 12px; height: 12px; border: none; border-radius: 50%; background: var(--color-accent); }
+.timeline-slider::-moz-range-track { background: transparent; }
+.timeline-placeholder { height: 44px; background: linear-gradient(var(--color-border), var(--color-border)) center / 100% 2px no-repeat; }
+.dashboard-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; padding: 16px 0; border-top: 1px solid var(--color-border); }
+.simulation-controls, .scenario-controls, .utility-controls { display: flex; align-items: center; gap: 8px; }
+.utility-controls { margin-left: auto; }
+.dashboard-status { display: flex; align-items: center; gap: 8px; margin-left: auto; font: 12px/1.4 var(--font-mono); color: var(--color-text-2); }
+.shortcut-help { position: relative; }
+.shortcut-tooltip { position: absolute; top: calc(100% + 8px); right: 0; z-index: 300; width: 250px; padding: 16px; border: 1px solid var(--color-border-2); border-radius: 4px; background: var(--color-surface); color: var(--color-text-2); font: 12px/1.8 var(--font-body); visibility: hidden; opacity: 0; transition: opacity 125ms ease; pointer-events: none; }
+.shortcut-tooltip p { margin-bottom: 8px; color: var(--color-text); }
+.shortcut-tooltip kbd { display: inline-block; min-width: 70px; font: 12px var(--font-mono); color: var(--color-text); }
+.shortcut-help:focus-within .shortcut-tooltip { visibility: visible; opacity: 1; }
+.dashboard-main { max-width: 1600px; margin: 0 auto; padding: 36px 32px 0; }
+.dashboard-main:focus { outline: none; }
+.dashboard-empty-state { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; margin-bottom: 24px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; }
+.dashboard-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; padding: 12px 0 20px; margin-bottom: 28px; border-bottom: 1px solid var(--color-border); }
+.legend-label { font: 12px var(--font-mono); color: var(--color-text-2); margin-right: 4px; }
+.channel-legend-button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 6px; border: 0; border-radius: 3px; background: transparent; color: var(--color-text-2); cursor: pointer; font: 12px var(--font-mono); }
+.channel-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.allocator-legend { display: flex; gap: 16px; margin-left: auto; font: 12px var(--font-mono); color: var(--color-text-2); }
+.allocator-legend > span { display: flex; align-items: center; gap: 8px; }
+.allocator-line { width: 20px; height: 2px; display: inline-block; }
+.allocator-line--bandit { background: var(--color-positive); }
+.allocator-line--static { background: repeating-linear-gradient(90deg, var(--color-static) 0 4px, transparent 4px 8px); }
+.channel-tooltip { position: fixed; z-index: 600; width: 280px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); padding: 16px; background: var(--color-surface); border: 1px solid; border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.4); font-family: var(--font-body); pointer-events: auto; overflow: auto; }
+.section-heading { margin-bottom: 20px; }
+.section-title { font: 22px/1.25 var(--font-heading); color: var(--color-text); }
+.section-description { margin-top: 8px; max-width: 75ch; font: 14px/1.6 var(--font-body); color: var(--color-text-2); }
+.dashboard-section { margin-bottom: 40px; }
+.objective-grid, .confidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--color-border); border: 1px solid var(--color-border); border-radius: 4px; overflow: hidden; }
+.objective-grid { margin-bottom: 40px; }
+.objective-grid > div, .confidence-grid > div { min-width: 0; }
+.confidence-panel { background: var(--color-bg); padding: 24px 20px; }
+.confidence-objective-heading { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 20px; font: 12px/1.4 var(--font-mono); color: var(--color-text-2); }
+.confidence-objective-code { color: var(--color-text); }
+.confidence-objective-name { flex-basis: 100%; font-family: var(--font-body); font-size: 14px; }
+.objective-heading { padding: 24px 20px 20px; border-bottom: 1px solid var(--color-border); }
+.objective-code { font: 26px/1.2 var(--font-display); }
+.objective-name { margin-top: 8px; font: 14px/1.4 var(--font-body); color: var(--color-text); }
+.objective-description { margin-top: 4px; font: 13px/1.5 var(--font-body); color: var(--color-text-2); }
+.objective-plot { padding: 20px 20px 0; }
+.objective-plot--comparison { padding: 20px; }
+.chart-caption { margin-bottom: 12px; font: 12px/1.4 var(--font-mono); color: var(--color-text); }
+.chart-description { margin: -4px 0 12px; font: 12px/1.4 var(--font-body); color: var(--color-text-2); }
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-button:not(:disabled):hover { border-color: #888; color: var(--color-text); background-color: var(--color-surface-2); }
+  .dashboard-button--active:not(:disabled):hover { background-color: #E00000; color: var(--color-bg); border-color: #E00000; }
+  .dashboard-button--shock:not(:disabled):hover, .dashboard-button--danger:not(:disabled):hover { color: #FF8888; border-color: #884444; }
+  .channel-legend-button:hover { color: var(--color-text); }
+  .shortcut-help:hover .shortcut-tooltip { visibility: visible; opacity: 1; }
 }
 @media (max-width: 1100px) {
-  .objective-grid, .confidence-grid { grid-template-columns: minmax(0, 1fr) !important; }
-  .dashboard-empty-state { gap: 16px; align-items: flex-start !important; flex-wrap: wrap; }
+  .objective-grid, .confidence-grid { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 600px) {
-  .dashboard-header { position: relative !important; padding: 0 16px !important; }
-  .dashboard-header-inner { gap: 20px !important; }
-  .dashboard-timeline { flex-basis: 100% !important; max-width: none !important; }
-  .dashboard-controls { gap: 8px !important; }
-  .dashboard-controls > div[style*="width: 1px"] { display: none; }
-  .dashboard-controls .dashboard-button { padding: 8px 12px !important; }
-  .dashboard-status { flex-basis: 100%; justify-content: flex-start !important; min-height: 16px; }
-  .dashboard-main { padding: 24px 16px 0 !important; }
-  .dashboard-empty-state { padding: 16px !important; }
+@media (max-width: 700px) {
+  .dashboard-header { position: relative; padding: 0 16px; }
+  .dashboard-masthead { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .dashboard-brand h1 { font-size: 22px; }
+  .dashboard-main { padding: 28px 16px 0; }
+  .simulation-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .scenario-controls { margin-right: auto; }
+  .utility-controls { width: 100%; margin-left: 0; }
+  .dashboard-status { width: 100%; margin-left: 0; }
+  .timeline-heading { flex-wrap: wrap; }
+  .timeline-current { margin-left: auto; }
   .dashboard-empty-state > div:first-child { display: flex; flex-direction: column; gap: 8px; }
-  .dashboard-empty-state > div:first-child > span { margin-left: 0 !important; }
-  .dashboard-legend { gap: 12px 16px !important; }
-  .dashboard-legend > div:last-child { margin-left: 0 !important; flex-basis: 100%; }
+  .dashboard-empty-state > div:first-child > span { margin-left: 0 !important; font-size: 13px !important; }
+  .allocator-legend { margin: 8px 0 0; width: 100%; }
+  .shortcut-tooltip { left: 0; right: auto; width: 230px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .decorative-motion, .kpi-value-updated { animation: none !important; }
+  .decorative-motion, .kpi-value-updated, .loading-spinner { animation: none !important; }
+  .dashboard-button:not(:disabled):not(:focus-visible):active { transform: none; }
+  .shock-banner { transition: none !important; }
   html { scroll-behavior: auto; }
 }
 
 .settings-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
-.business-metrics { padding: 24px; min-width: 0; }
-.business-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
-.business-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.business-kpi-card, .business-chart-panel { min-width: 0; }
-.business-objective-tab { min-height: 44px; }
-.business-objective-tab:hover { border-color: #888 !important; }
-@media (max-width: 900px) {
-  .business-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 600px) {
-  .business-metrics { padding: 16px; }
-  .business-chart-grid { grid-template-columns: minmax(0, 1fr); }
-}

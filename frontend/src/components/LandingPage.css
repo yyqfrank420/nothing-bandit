@@ -1,0 +1,175 @@
+.landing-page {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100dvh;
+  padding: clamp(32px, 6vh, 64px) clamp(20px, 5vw, 64px) 24px;
+  overflow-y: auto;
+  background: var(--color-bg);
+  color: var(--color-text);
+  opacity: 1;
+  transition: opacity 180ms var(--ease-out);
+}
+
+.landing-page.is-leaving { opacity: 0; }
+
+.landing-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 1000px;
+  flex-shrink: 0;
+  margin: auto 0;
+  text-align: center;
+  animation: landing-enter 260ms var(--ease-out);
+}
+
+.landing-brand-dot {
+  width: 18px;
+  height: 18px;
+  margin-bottom: clamp(32px, 5vh, 48px);
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.landing-title {
+  max-width: 100%;
+  margin: 0;
+  font-family: var(--font-display, "Ndot55", monospace);
+  font-size: clamp(40px, 7vw, 80px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.landing-description { margin-top: 24px; }
+
+.landing-summary {
+  font-family: var(--font-body, "LetteraMonoLL", monospace);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text-2);
+  text-wrap: balance;
+}
+
+.landing-details {
+  margin-top: 12px;
+  font-family: var(--font-mono, "LetteraMonoLL", monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+  color: var(--color-muted);
+  text-wrap: balance;
+}
+
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  max-width: 100%;
+  margin-top: clamp(32px, 5vh, 48px);
+}
+
+.landing-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px 28px;
+  border: 1px solid;
+  border-radius: 3px;
+  font-family: var(--font-mono, "LetteraMonoLL", monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease,
+    color 160ms ease, transform 120ms var(--ease-out);
+}
+
+.landing-button-primary {
+  background: var(--color-text);
+  border-color: var(--color-text);
+  color: var(--color-bg);
+}
+
+.landing-button-secondary {
+  background: transparent;
+  border-color: var(--color-muted);
+  color: var(--color-text);
+}
+
+.landing-button:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 4px;
+}
+
+.landing-button:not(:disabled):not(:focus-visible):active { transform: scale(0.98); }
+.landing-button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+@media (hover: hover) and (pointer: fine) {
+  .landing-button-primary:not(:disabled):hover {
+    background: #FFFFFF;
+    border-color: #FFFFFF;
+  }
+  .landing-button-secondary:not(:disabled):hover {
+    background: var(--color-surface-2);
+    border-color: var(--color-text);
+  }
+}
+
+.landing-spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-muted);
+  border-top-color: var(--color-text);
+  border-radius: 50%;
+  animation: landing-spin 600ms linear infinite;
+}
+
+.landing-error {
+  max-width: 48ch;
+  margin-top: 24px;
+  font-family: var(--font-body, "LetteraMonoLL", monospace);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.landing-footer {
+  flex-shrink: 0;
+  margin-top: 48px;
+  font-family: var(--font-mono, "LetteraMonoLL", monospace);
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+@keyframes landing-enter {
+  from { opacity: 0.7; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes landing-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 480px) {
+  .landing-actions { width: 100%; max-width: 320px; flex-direction: column; }
+  .landing-button { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-page, .landing-button { transition: none; }
+  .landing-content, .landing-spinner { animation: none; }
+  .landing-button:not(:disabled):not(:focus-visible):active { transform: none; }
+}

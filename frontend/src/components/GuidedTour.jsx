@@ -18,6 +18,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import "./SettingsPanel.css";
 
 function useTourDialog(onClose) {
   const ref = useRef(null);
@@ -55,152 +56,129 @@ function useTourDialog(onClose) {
 
 const GUIDE_SLIDES = [
   {
-    tag:   "THE SCENARIO",
-    title: "You Have $10K. Six Channels. No Playbook.",
+    tag: "THE SIMULATION",
+    title: "Compare two budget strategies",
     body: [
       {
-        bold: "The brief",
-        text: "you're launching a consumer electronics product across Southeast Asia. Six digital channels: KOL partnerships, Instagram Ads, TikTok Ads, Google Search. Daily budget: $10,000. Question: how do you split it?",
+        bold: "Six channels",
+        text: "Tech KOL, Design KOL, Generic KOL, Instagram Ads, TikTok Ads, and Google Search share the daily budget.",
       },
       {
-        bold: "What most teams do",
-        text: "equal splits, or last quarter's numbers. Simple, auditable, and quietly expensive — because not every channel performs the same, and the split never adjusts.",
+        bold: "Adaptive allocation",
+        text: "the bandit uses daily results to update its beliefs and change each channel's share.",
       },
       {
-        bold: "The hidden cost",
-        text: "in this simulation, Google Search converts 4× better than Generic KOL. A static equal split sends 17% of budget to the worst performer every single day — that's not a rounding error, it's structural waste.",
-      },
-      {
-        bold: "The question this answers",
-        text: "what if the budget allocated itself — observing daily results and shifting spend toward what's actually working, automatically, every day?",
+        bold: "Fixed comparison",
+        text: "the static strategy keeps a weighted channel mix. Both strategies face the same simulated conditions each day.",
       },
     ],
     accent: null,
   },
   {
-    tag:   "THE ALGORITHM",
+    tag: "THE METHOD",
     title: "Thompson Sampling",
     body: [
       {
-        bold: "What it is",
-        text: "a reinforcement learning algorithm from the Multi-Armed Bandit family. Named after the \"explore vs exploit\" tradeoff — do you keep playing the slot machine that paid out, or try others?",
+        bold: "Sample",
+        text: "draw a possible success rate for each channel from its current belief. Uncertainty gives less familiar channels a chance to receive spend.",
       },
       {
-        bold: "How it works",
-        text: "each channel gets a Beta(α, β) distribution — a probabilistic belief about its true performance rate. Each day: sample from each belief, allocate more budget to the highest draw. Update beliefs from observed results.",
+        bold: "Allocate",
+        text: "split the budget in proportion to those draws. Both strategies start with the same mix on day one; sampling begins on day two.",
       },
       {
-        bold: "Why not A/B testing",
-        text: "A/B tests freeze budget during the test period, wasting it on underperformers just to gather data. Thompson Sampling explores and exploits simultaneously — the exploration tax is proportional, not total.",
-      },
-      {
-        bold: "In plain English",
-        text: "the algorithm starts uncertain, stays curious about channels it hasn't seen enough of, and steadily bets more on proven winners. The confidence distributions at the bottom of the dashboard show this learning in real time.",
+        bold: "Learn",
+        text: "record success when a channel meets the selected reward threshold. Update its belief, then discount accumulated evidence using the forgetting setting.",
       },
     ],
     accent: null,
   },
   {
-    tag:   "THE PROTOTYPE",
-    title: "What You're Seeing",
+    tag: "THE OBJECTIVES",
+    title: "Choose a measure",
     body: [
       {
-        bold: "6 digital channels",
-        text: "Tech KOL, Design KOL, Generic KOL, Instagram Ads, TikTok Ads, Google Search — representing the SEA digital media mix for a consumer electronics launch.",
+        bold: "CTR",
+        text: "click-through rate. A result at or above its threshold counts as a success.",
       },
       {
-        bold: "3 independent bandits",
-        text: "CTR (click-through rate), ROAS (revenue per dollar spent), and CAC (cost per acquisition) each run their own bandit with their own Beta posteriors. They may disagree on which channel is \"best\".",
+        bold: "ROAS and CAC",
+        text: "return on ad spend rewards higher revenue per dollar. Customer acquisition cost rewards lower cost per customer.",
       },
       {
-        bold: "183-day campaign",
-        text: "half a year of daily allocation decisions. The learning curve is visible: early days = wide exploration, later days = concentrated bets on proven channels.",
-      },
-      {
-        bold: "Static baseline",
-        text: "a naïve equal-split allocator runs in parallel every day. Every chart shows both lines — the bandit's edge (or lack of it) is the gap between them.",
+        bold: "Separate strategies",
+        text: "each objective has its own bandit and may allocate differently. Settings controls the budget, noise, reward thresholds, and forgetting.",
       },
     ],
     accent: null,
   },
   {
-    tag:    "TRANSPARENCY",
-    title:  "What's Real vs Simulated",
+    tag: "THE DEMO",
+    title: "What is real or simulated",
     twoCol: true,
     real: [
-      "Thompson Sampling decision logic",
-      "Beta(α, β) posterior update rule",
-      "Explore/exploit balancing mechanism",
-      "Multi-objective parallel architecture",
-      "Shock event adaptation (same algorithm — new data)",
-      "API + database layer (FastAPI + Postgres)",
+      "Thompson Sampling budget decisions",
+      "Threshold-based success and failure updates",
+      "Separate learning for CTR, ROAS, and CAC",
+      "Comparison with a fixed weighted strategy",
     ],
     simulated: [
-      "Channel base rates set by us (CTR, ROAS, CAC means + σ)",
-      "Daily impression/conversion simulation from those parameters",
-      "Revenue figures (no real payment processor)",
-      "6 pre-written SEA shock scenarios",
-      "The \"market\" itself — not real ad platform data",
+      "Channel performance rates and daily variation",
+      "Revenue, clicks, and conversions",
+      "Preset market shock scenarios",
+      "All campaign outcomes; no live ad data",
     ],
-    note: "Swap the simulation layer for live API calls (Meta Ads, Google Ads API) and the algorithm runs identically with zero changes.",
+    note: "This demo does not place ads or use live campaign data.",
   },
   {
-    tag:   "THE DASHBOARD",
-    title: "How to Read It",
+    tag: "THE DASHBOARD",
+    title: "Read the results",
     body: [
       {
-        bold: "Budget Allocation (top charts)",
-        text: "stacked area — watch budget migrate away from weak channels over time. Vertical red lines mark market shock events.",
+        bold: "Budget allocation",
+        text: "each colored area shows a channel's share of spend. Red lines mark simulated market shocks.",
       },
       {
-        bold: "Bandit vs Static (lower charts)",
-        text: "cumulative performance comparison. The gap should widen as the bandit accumulates evidence. CAC chart is inverted — lower = top of chart = better.",
+        bold: "Performance and outcomes",
+        text: "compare the bandit with the fixed strategy over time. Higher CTR and ROAS are better; lower CAC is better. Results can favor either strategy.",
       },
       {
-        bold: "Confidence distributions (bottom)",
-        text: "Beta(α, β) curves per channel. Tall narrow peak = confident about this channel. Wide flat curve = still exploring. The mode % label shows the most likely true performance rate.",
-      },
-      {
-        bold: "Business Outcomes (full-width section)",
-        text: "KPI cards — revenue, CAC, ROAS, conversions — comparing bandit vs static cumulatively. Toggle CTR / ROAS / CAC tabs to filter by objective.",
+        bold: "Confidence curves",
+        text: "these estimate the chance of meeting a reward threshold, not the CTR, ROAS, or CAC value itself. Narrower curves indicate greater certainty.",
       },
     ],
-    accent: "After this guide, a 3-step tour will highlight the controls, charts, and outcome metrics.",
+    accent: "Next, a three-step tour shows the controls, allocation charts, and business outcomes.",
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Spotlight tour step definitions
-// ---------------------------------------------------------------------------
-
 const STEPS = [
   {
-    target:  "controls",
-    title:   "Run the Simulation",
+    target: "controls",
+    title: "Run the simulation",
     bullets: [
-      { bold: "+1 Day / +1 Wk / +1 Mo", text: "step time forward and watch the bandit adapt." },
-      { bold: "Auto",                    text: "runs continuously — speed is adjustable in ⚙ Settings." },
-      { bold: "⚡ Shock",               text: "injects a live SEA market event and forces re-adaptation." },
+      { bold: "+1 Day / +1 Week / +1 Month", text: "advance the campaign and update the results." },
+      { bold: "Auto", text: "runs until paused or the campaign ends. Set its speed in Settings." },
+      { bold: "Shock", text: "adds a simulated market event that temporarily changes channel performance." },
     ],
     position: "bottom",
   },
   {
-    target:  "allocation-grid",
-    title:   "Watch Budget Shift",
+    target: "allocation-grid",
+    title: "Follow the budget",
     bullets: [
-      { bold: "3 independent bandits",  text: "— one each for CTR, ROAS, and CAC." },
-      { bold: "Stacked area chart",     text: "shows budget migrating to proven winners over time." },
-      { bold: "Hover the shock lines",  text: "to see what market event triggered each disruption." },
+      { bold: "Three objectives", text: "CTR, ROAS, and CAC each use a separate bandit." },
+      { bold: "Colored areas", text: "show how each channel's share of spend changes over time." },
+      { bold: "Red event lines", text: "hover to read the simulated shock details." },
     ],
     position: "bottom",
   },
   {
-    target:  "business-outcomes",
-    title:   "Measure the Outcome",
+    target: "business-outcomes",
+    title: "Compare the outcomes",
     bullets: [
-      { bold: "Revenue, CAC, ROAS, Conversions", text: "— all tracked cumulatively." },
-      { bold: "Solid line = bandit",             text: "— dashed line = static baseline." },
-      { bold: "Objective tabs",                  text: "filter all KPI charts to a single bandit objective." },
+      { bold: "Revenue and conversions", text: "accumulate over the campaign. CAC and ROAS use running totals." },
+      { bold: "Solid and dashed lines", text: "compare the bandit and static strategies, respectively." },
+      { bold: "Objective tabs", text: "show one objective or the average across all three." },
     ],
     position: "bottom",
   },
@@ -214,31 +192,25 @@ const PADDING = 14;
 
 const btnSecondary = {
   background:    "none",
-  border:        "none",
-  color:         "#A0A0A0",
   fontSize:      "12px",
   letterSpacing: "0.07em",
   textTransform: "uppercase",
   cursor:        "pointer",
-  fontFamily:    "LetteraMonoLL, monospace",
+  fontFamily:    "var(--font-mono)",
   padding:       "8px 0",
   minHeight:     "44px",
-  transition:    "color 150ms",
 };
 
 const btnPrimary = {
   padding:       "9px 22px",
   minHeight:     "44px",
   background:    "#1A1A1A",
-  border:        "1px solid #444",
   borderRadius:  "3px",
-  color:         "#F0F0F0",
   fontSize:      "12px",
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   cursor:        "pointer",
-  fontFamily:    "LetteraMonoLL, monospace",
-  transition:    "border-color 200ms",
+  fontFamily:    "var(--font-mono)",
 };
 
 // ---------------------------------------------------------------------------
@@ -281,6 +253,7 @@ function UserGuide({ onDone, onSkip }) {
         {/* Guide content scrolls independently of the dashboard. */}
         <div
           ref={dialogRef}
+          className="tour-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="guide-title"
@@ -294,9 +267,8 @@ function UserGuide({ onDone, onSkip }) {
             background:   "#141414",
             border:       "1px solid #2A2A2A",
             borderRadius: "4px",
-            fontFamily:   "LetteraMonoLL, monospace",
+            fontFamily:   "var(--font-body)",
             boxShadow:    "0 12px 60px rgba(0,0,0,0.7)",
-            animation:    "fadeIn 250ms ease",
           }}
         >
 
@@ -305,13 +277,15 @@ function UserGuide({ onDone, onSkip }) {
             display:      "flex",
             alignItems:   "center",
             justifyContent: "space-between",
-            padding:      "16px 28px",
+            padding:      "24px",
+            gap: "12px",
+            flexWrap: "wrap",
             borderBottom: "1px solid #1E1E1E",
           }}>
             {/* Brand */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--color-accent)", flexShrink: 0 }} />
-              <span style={{ fontFamily: "Ndot55, monospace", fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.12em" }}>
+              <span style={{ fontFamily: "var(--font-display)", fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.12em" }}>
                 NOTHING BANDIT™
               </span>
             </div>
@@ -322,11 +296,12 @@ function UserGuide({ onDone, onSkip }) {
           </div>
 
           {/* Slide content */}
-          <div style={{ padding: "28px 28px 20px" }}>
+          <div style={{ padding: "24px" }}>
 
             {/* Slide tag */}
             <div style={{
-              fontSize:      "9px",
+              fontSize:      "12px",
+              fontFamily: "var(--font-mono)",
               color:         "var(--color-accent)",
               letterSpacing: "0.14em",
               textTransform: "uppercase",
@@ -339,10 +314,10 @@ function UserGuide({ onDone, onSkip }) {
             <h2 id="guide-title" tabIndex={-1} aria-live="polite" style={{
               marginTop: 0,
               fontWeight: "normal",
-              fontFamily:    "Ndot55, monospace",
-              fontSize:      "16px",
+              fontFamily:    "var(--font-heading)",
+              fontSize:      "22px",
               color:         "#F0F0F0",
-              letterSpacing: "0.08em",
+              letterSpacing: "0.01em",
               textTransform: "uppercase",
               marginBottom:  "22px",
               lineHeight:    1.3,
@@ -360,8 +335,8 @@ function UserGuide({ onDone, onSkip }) {
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
                     {current.real.map((item, i) => (
-                      <li key={i} style={{ display: "flex", gap: "7px", fontSize: "12px", color: "#A0A0A0", lineHeight: "1.5" }}>
-                        <span style={{ color: "var(--color-positive)", flexShrink: 0, marginTop: "1px" }}>—</span>
+                      <li key={i} style={{ display: "flex", gap: "7px", fontSize: "14px", color: "var(--color-text-2)", lineHeight: "1.5" }}>
+                        <span style={{ color: "var(--color-positive)", flexShrink: 0, marginTop: "1px" }}>·</span>
                         {item}
                       </li>
                     ))}
@@ -375,8 +350,8 @@ function UserGuide({ onDone, onSkip }) {
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
                     {current.simulated.map((item, i) => (
-                      <li key={i} style={{ display: "flex", gap: "7px", fontSize: "12px", color: "#A0A0A0", lineHeight: "1.5" }}>
-                        <span style={{ color: "#A0A0A0", flexShrink: 0, marginTop: "1px" }}>—</span>
+                      <li key={i} style={{ display: "flex", gap: "7px", fontSize: "14px", color: "var(--color-text-2)", lineHeight: "1.5" }}>
+                        <span style={{ color: "#A0A0A0", flexShrink: 0, marginTop: "1px" }}>·</span>
                         {item}
                       </li>
                     ))}
@@ -387,8 +362,8 @@ function UserGuide({ onDone, onSkip }) {
               /* Standard bullet list for all other slides */
               <ul style={{ margin: "0 0 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "13px", marginBottom: "20px" }}>
                 {current.body.map((b, i) => (
-                  <li key={i} style={{ display: "flex", gap: "10px", fontSize: "12px", color: "#A0A0A0", lineHeight: "1.6" }}>
-                    <span style={{ color: "#A0A0A0", flexShrink: 0, marginTop: "1px" }}>—</span>
+                  <li key={i} style={{ display: "flex", gap: "10px", fontSize: "14px", color: "var(--color-text-2)", lineHeight: "1.6" }}>
+                    <span style={{ color: "#A0A0A0", flexShrink: 0, marginTop: "1px" }}>·</span>
                     <span>
                       <strong style={{ color: "#C0C0C0", fontWeight: "600" }}>{b.bold}:</strong>
                       {" "}{b.text}
@@ -404,7 +379,7 @@ function UserGuide({ onDone, onSkip }) {
                 padding:      "10px 14px",
                 background:   "rgba(255,255,255,0.02)",
                 borderLeft:   "2px solid #333",
-                fontSize:     "12px",
+                fontSize:     "13px",
                 color:        "#A0A0A0",
                 lineHeight:   "1.6",
                 marginBottom: "4px",
@@ -420,20 +395,21 @@ function UserGuide({ onDone, onSkip }) {
             display:        "flex",
             alignItems:     "center",
             justifyContent: "space-between",
-            padding:        "14px 28px 20px",
+            padding:        "16px 24px 24px",
             flexWrap:       "wrap",
             gap:            "16px",
             borderTop:      "1px solid #1A1A1A",
           }}>
             {/* Progress dots */}
-            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 0, alignItems: "center" }}>
               {GUIDE_SLIDES.map((_, i) => (
                 <button
                   key={i}
+                  className="dialog-button tour-progress"
                   onClick={() => setSlide(i)}
                   style={{
-                    width:        "24px",
-                    height:       "24px",
+                    width:        "44px",
+                    height:       "44px",
                     borderRadius: "3px",
                     background:   "transparent",
                     display:      "grid",
@@ -441,7 +417,6 @@ function UserGuide({ onDone, onSkip }) {
                     border:       "none",
                     cursor:       "pointer",
                     padding:      0,
-                    transition:   "all 250ms ease",
                     flexShrink:   0,
                   }}
                   aria-label={`Go to slide ${i + 1}`}
@@ -462,16 +437,13 @@ function UserGuide({ onDone, onSkip }) {
             <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
               <button
                 onClick={onSkip}
+                className="dialog-button tour-secondary tour-skip-dashboard"
                 style={{
                   ...btnSecondary,
-                  color:         "#A0A0A0",
-                  border:        "1px solid #2A2A2A",
                   borderRadius:  "3px",
                   padding:       "7px 14px",
                   fontSize:      "12px",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#C0C0C0"; e.currentTarget.style.borderColor = "#555"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#A0A0A0";    e.currentTarget.style.borderColor = "#2A2A2A"; }}
               >
                 Skip to Dashboard →
               </button>
@@ -479,9 +451,8 @@ function UserGuide({ onDone, onSkip }) {
               {slide > 0 && (
                 <button
                   onClick={() => setSlide((s) => s - 1)}
-                  style={{ ...btnSecondary, color: "#A0A0A0" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
+                  className="dialog-button tour-secondary"
+                  style={btnSecondary}
                 >
                   ← Back
                 </button>
@@ -489,9 +460,8 @@ function UserGuide({ onDone, onSkip }) {
 
               <button
                 onClick={isLast ? onDone : () => setSlide((s) => s + 1)}
+                className="dialog-button tour-primary"
                 style={btnPrimary}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#888"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#444"; }}
               >
                 {isLast ? "Start Tour →" : "Next →"}
               </button>
@@ -552,6 +522,7 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
 
       {/* Spotlight cutout */}
       {rect && <div
+        className="tour-spotlight-mask"
         style={{
           position:      "fixed",
           left:          `${boxLeft}px`,
@@ -563,18 +534,13 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
           outline:       "1px solid rgba(255,255,255,0.07)",
           zIndex:        9001,
           pointerEvents: "none",
-          transition:    [
-            "left 360ms cubic-bezier(0.22,1,0.36,1)",
-            "top 360ms cubic-bezier(0.22,1,0.36,1)",
-            "width 360ms cubic-bezier(0.22,1,0.36,1)",
-            "height 360ms cubic-bezier(0.22,1,0.36,1)",
-          ].join(", "),
         }}
       />}
 
       {/* Tooltip callout */}
       <div
         ref={dialogRef}
+        className="tour-dialog tour-spotlight"
         role="dialog"
         aria-modal="true"
         aria-labelledby="tour-title"
@@ -591,16 +557,15 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
           background:    "#161616",
           border:        "1px solid #2A2A2A",
           borderRadius:  "4px",
-          padding:       "20px 24px",
-          fontFamily:    "LetteraMonoLL, monospace",
+          padding:       "24px",
+          fontFamily:    "var(--font-body)",
           boxShadow:     "0 8px 40px rgba(0,0,0,0.6)",
-          animation:     "fadeIn 300ms ease",
           pointerEvents: "auto",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Step counter */}
-        <div style={{ fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "10px" }}>
+        <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--color-text-2)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "10px" }}>
           {stepIndex + 1} / {totalSteps}
         </div>
 
@@ -608,10 +573,10 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
         <h2 id="tour-title" aria-live="polite" style={{
           marginTop: 0,
           fontWeight: "normal",
-          fontFamily:    "Ndot55, monospace",
-          fontSize:      "13px",
+          fontFamily:    "var(--font-heading)",
+          fontSize:      "20px",
           color:         "#F0F0F0",
-          letterSpacing: "0.08em",
+          letterSpacing: "0.01em",
           textTransform: "uppercase",
           marginBottom:  "10px",
           lineHeight:    1.3,
@@ -622,8 +587,8 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
         {/* Bullets */}
         <ul style={{ margin: "0 0 20px 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
           {step.bullets.map((b, i) => (
-            <li key={i} style={{ fontSize: "12px", color: "#A0A0A0", lineHeight: "1.5", display: "flex", gap: "8px" }}>
-              <span style={{ color: "#A0A0A0", flexShrink: 0 }}>—</span>
+            <li key={i} style={{ fontSize: "14px", color: "var(--color-text-2)", lineHeight: "1.5", display: "flex", gap: "8px" }}>
+              <span style={{ color: "#A0A0A0", flexShrink: 0 }}>·</span>
               <span>
                 <strong style={{ color: "#C0C0C0", fontWeight: "600" }}>"{b.bold}"</strong>
                 {" "}{b.text}
@@ -636,18 +601,16 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <button
             onClick={onSkip}
+            className="dialog-button tour-secondary"
             style={btnSecondary}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
           >
             Skip Tour
           </button>
 
           <button
             onClick={onNext}
+            className="dialog-button tour-primary"
             style={btnPrimary}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#888"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#444"; }}
           >
             {stepIndex < totalSteps - 1 ? "Next →" : "Done"}
           </button>

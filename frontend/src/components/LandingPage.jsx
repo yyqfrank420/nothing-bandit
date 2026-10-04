@@ -1,305 +1,96 @@
-/**
- * File: LandingPage.jsx
- * Language: JavaScript (React 18)
- * Purpose: Full-screen title screen shown on first load (day 0 only).
- *          Bypassed automatically if simulation data already exists (day > 0).
- *
- * Connects to: App.jsx
- * Inputs:
- *   onStart      — callback: enter dashboard at day 0 (no tour)
- *   onGetStarted — callback: enter dashboard at day 0 AND trigger guided tour
- *   onSimulate   — callback(nDays): resolves true on success, false on failure
- *   error        — simulation failure message shown with recovery actions
- * Outputs: Full-viewport React element
- */
-
 import React, { useEffect, useRef, useState } from "react";
+import "./LandingPage.css";
 
 export default function LandingPage({ onStart, onGetStarted, onSimulate, error }) {
-  const [visible,  setVisible]  = useState(false);   // controls fade-in
-  const [leaving,  setLeaving]  = useState(false);   // controls fade-out
-  const [loading,  setLoading]  = useState(false);   // +1 Day in progress
+  const [leaving, setLeaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const dismissTimer = useRef(null);
   const dismissing = useRef(false);
   const mounted = useRef(false);
   const simulating = useRef(false);
 
-  // Slight delay before fade-in so browser has painted the initial black frame.
   useEffect(() => {
     mounted.current = true;
-    const t = setTimeout(() => setVisible(true), 60);
     return () => {
       mounted.current = false;
-      clearTimeout(t);
       clearTimeout(dismissTimer.current);
     };
   }, []);
 
-  // Fade out, then call the callback once the transition is done.
-  function dismiss(cb) {
+  function dismiss(callback, immediate = false) {
     if (dismissing.current || !mounted.current) return;
     dismissing.current = true;
+    if (immediate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      callback();
+      return;
+    }
     setLeaving(true);
-    dismissTimer.current = setTimeout(cb, 500);
+    dismissTimer.current = setTimeout(callback, 180);
   }
 
-  async function handleSimulate() {
+  async function handleSimulate(event) {
     if (simulating.current || dismissing.current) return;
+    const keyboardInitiated = event.detail === 0;
     simulating.current = true;
     setLoading(true);
     try {
       const succeeded = await onSimulate(1);
-      if (succeeded) dismiss(onStart);
+      if (succeeded) dismiss(onStart, keyboardInitiated);
     } finally {
       simulating.current = false;
       if (mounted.current) setLoading(false);
     }
   }
 
-  const opacity = leaving ? 0 : visible ? 1 : 0;
-
   return (
-    <>
-      {/* Keyframes only needed here — scoped to this component */}
-      <style>{`
-        @keyframes dotPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(255,0,0,0.4); }
-          50%       { box-shadow: 0 0 0 18px rgba(255,0,0,0); }
-        }
-        @keyframes landingFadeUp {
-          from { opacity: 0; transform: translateY(14px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .landing-page, .landing-page * {
-            animation: none !important;
-            transition: none !important;
-            transform: none !important;
-          }
-        }
-      `}</style>
-
-      <main className="landing-page" aria-labelledby="landing-title" style={{
-        position:        "fixed",
-        inset:           0,
-        background:      "#0D0D0D",
-        display:         "flex",
-        flexDirection:   "column",
-        alignItems:      "center",
-        padding:         "48px 24px 24px",
-        boxSizing:       "border-box",
-        overflowY:       "auto",
-        zIndex:          2000,
-        opacity,
-        transition:      "opacity 500ms ease",
-      }}>
-
-        {/* Subtle dot-grid background — same vibe as Nothing's product pages */}
-        <div style={{
-          position:   "absolute",
-          inset:      0,
-          backgroundImage: "radial-gradient(circle, #1A1A1A 1px, transparent 1px)",
-          backgroundSize:  "28px 28px",
-          opacity:    0.5,
-          pointerEvents: "none",
-        }} />
-
-        {/* Center content */}
-        <div style={{
-          position:      "relative",
-          display:       "flex",
-          flexDirection: "column",
-          alignItems:    "center",
-          gap:           "0",
-          textAlign:     "center",
-          width:         "100%",
-          maxWidth:      "880px",
-          flexShrink:    0,
-          margin:        "auto 0",
-        }}>
-
-          {/* Nothing red dot — large version with slow pulse */}
-          <div aria-hidden="true" style={{
-            width:        "18px",
-            height:       "18px",
-            borderRadius: "50%",
-            background:   "#FF0000",
-            animation:    "dotPulse 2.8s ease-in-out infinite",
-            marginBottom: "40px",
-            animationDelay: "0.8s",
-            // Entrance
-            opacity:    visible ? 1 : 0,
-            transform:  visible ? "scale(1)" : "scale(0.4)",
-            transition: "opacity 500ms ease 0ms, transform 500ms cubic-bezier(0.22,1,0.36,1) 0ms",
-          }} />
-
-          {/* Title */}
-          <h1 id="landing-title" style={{
-            fontFamily:     "Ndot55, monospace",
-            fontSize:       "clamp(32px, 6vw, 60px)",
-            color:          "#F0F0F0",
-            letterSpacing:  "0.12em",
-            textTransform:  "uppercase",
-            lineHeight:     1.2,
-            margin:         "0 0 20px",
-            fontWeight:     400,
-            textWrap:       "balance",
-            animation:      visible ? "landingFadeUp 600ms ease 150ms both" : "none",
-          }}>
-            Nothing Bandit™
-          </h1>
-
-          {/* Descriptor row */}
-          <div style={{
-            fontFamily:    "LetteraMonoLL, monospace",
-            fontSize:      "11px",
-            color:         "#999",
-            lineHeight:    1.7,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            marginBottom:  "8px",
-            animation:     visible ? "landingFadeUp 600ms ease 300ms both" : "none",
-          }}>
-            Thompson Sampling · 6 Channels · 3 Objectives
-          </div>
-
-          <div style={{
-            fontFamily:    "LetteraMonoLL, monospace",
-            fontSize:      "10px",
-            color:         "#888",
-            lineHeight:    1.7,
-            letterSpacing: "0.1em",
-            marginBottom:  "64px",
-            animation:     visible ? "landingFadeUp 600ms ease 380ms both" : "none",
-          }}>
+    <main
+      className={`landing-page${leaving ? " is-leaving" : ""}`}
+      aria-labelledby="landing-title"
+    >
+      <div className="landing-content">
+        <div className="landing-brand-dot" aria-hidden="true" />
+        <h1 id="landing-title" className="landing-title">Nothing Bandit™</h1>
+        <div className="landing-description">
+          <p className="landing-summary">
             183-day SEA marketing campaign simulation
-          </div>
-
-          {/* CTA buttons */}
-          <div style={{
-            display:   "flex",
-            gap:       "12px",
-            flexWrap:  "wrap",
-            justifyContent: "center",
-            maxWidth:  "100%",
-            animation: visible ? "landingFadeUp 600ms ease 500ms both" : "none",
-          }}>
-            {/* Get Started — enter dashboard + trigger guided tour */}
-            <button
-              onClick={() => dismiss(onGetStarted)}
-              disabled={loading || leaving}
-              style={{
-                padding:       "12px 28px",
-                minHeight:     "44px",
-                background:    "transparent",
-                border:        "1px solid #333",
-                borderRadius:  "3px",
-                color:         "#888",
-                fontFamily:    "LetteraMonoLL, monospace",
-                fontSize:      "11px",
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                cursor:        loading ? "not-allowed" : "pointer",
-                transition:    "all 200ms ease",
-                opacity:       loading ? 0.4 : 1,
-              }}
-              onMouseEnter={e => {
-                if (!loading) {
-                  e.currentTarget.style.borderColor = "#555";
-                  e.currentTarget.style.color       = "#C0C0C0";
-                }
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = "#333";
-                e.currentTarget.style.color       = "#888";
-              }}
-            >
-              Get Started
-            </button>
-
-            {/* +1 Day — simulate one day then enter dashboard */}
-            <button
-              onClick={handleSimulate}
-              disabled={loading || leaving}
-              aria-busy={loading}
-              style={{
-                padding:       "12px 28px",
-                minHeight:     "44px",
-                background:    loading ? "#1A1A1A" : "#FF0000",
-                border:        "1px solid",
-                borderColor:   loading ? "#333" : "#FF0000",
-                borderRadius:  "3px",
-                color:         loading ? "#999" : "#FFFFFF",
-                fontFamily:    "LetteraMonoLL, monospace",
-                fontSize:      "11px",
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                cursor:        loading ? "not-allowed" : "pointer",
-                transition:    "all 200ms ease",
-                display:       "flex",
-                alignItems:    "center",
-                gap:           "8px",
-              }}
-              onMouseEnter={e => {
-                if (!loading) {
-                  e.currentTarget.style.background  = "#CC0000";
-                  e.currentTarget.style.borderColor = "#CC0000";
-                }
-              }}
-              onMouseLeave={e => {
-                if (!loading) {
-                  e.currentTarget.style.background  = "#FF0000";
-                  e.currentTarget.style.borderColor = "#FF0000";
-                }
-              }}
-            >
-              {loading ? (
-                <>
-                  <div aria-hidden="true" style={{
-                    width: "10px", height: "10px",
-                    border: "1px solid #444", borderTopColor: "#888",
-                    borderRadius: "50%",
-                    animation: "spin 500ms linear infinite",
-                    flexShrink: 0,
-                  }} />
-                  Simulating…
-                </>
-              ) : "+1 Day (skip tutorial)"}
-            </button>
-          </div>
-          {error && (
-            <p role="alert" style={{
-              maxWidth: "48ch",
-              margin: "20px 0 0",
-              color: "#F0F0F0",
-              fontFamily: "LetteraMonoLL, monospace",
-              fontSize: "12px",
-              lineHeight: 1.6,
-              overflowWrap: "anywhere",
-            }}>
-              {error} Try +1 Day again, or select Get Started.
-            </p>
-          )}
+          </p>
+          <p className="landing-details">
+            Thompson Sampling · 6 Channels · 3 Objectives
+          </p>
         </div>
-
-        {/* Bottom label */}
-        <footer style={{
-          position:      "relative",
-          flexShrink:    0,
-          marginTop:     "40px",
-          textAlign:     "center",
-          fontFamily:    "LetteraMonoLL, monospace",
-          fontSize:      "9px",
-          color:         "#888",
-          lineHeight:    1.6,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          animation:     visible ? "landingFadeUp 600ms ease 700ms both" : "none",
-        }}>
-          Nothing Technology Ltd · Prototype
-        </footer>
-
-      </main>
-    </>
+        <div className="landing-actions">
+          <button
+            type="button"
+            className="landing-button landing-button-primary"
+            onClick={event => dismiss(onGetStarted, event.detail === 0)}
+            disabled={loading || leaving}
+          >
+            Get Started
+          </button>
+          <button
+            type="button"
+            className="landing-button landing-button-secondary"
+            onClick={handleSimulate}
+            disabled={loading || leaving}
+            aria-busy={loading}
+          >
+            {loading ? (
+              <>
+                <span className="landing-spinner" aria-hidden="true" />
+                Simulating…
+              </>
+            ) : "+1 Day (skip tutorial)"}
+          </button>
+        </div>
+        {error && (
+          <p role="alert" className="landing-error">
+            {error} Try +1 Day again, or select Get Started.
+          </p>
+        )}
+      </div>
+      <footer className="landing-footer">
+        Nothing Technology Ltd · Prototype
+      </footer>
+    </main>
   );
 }
