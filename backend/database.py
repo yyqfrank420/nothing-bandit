@@ -542,13 +542,11 @@ def get_triggered_shock_names() -> set:
     return {r["name"] for r in rows}
 
 
-def get_active_shocks() -> list:
-    """Return all shocks with days_remaining > 0 as plain dicts (JSON fields deserialised)."""
+def get_shocks(*, active_only: bool = True) -> list:
+    """Return ordered shock history, optionally restricted to unexpired events."""
     conn = _connect()
-    if USE_POSTGRES:
-        cur = _exec(conn, "SELECT * FROM active_shocks WHERE days_remaining > 0")
-    else:
-        cur = _exec(conn, "SELECT * FROM active_shocks WHERE days_remaining > 0")
+    where = " WHERE days_remaining > 0" if active_only else ""
+    cur = _exec(conn, f"SELECT * FROM active_shocks{where} ORDER BY id")
     rows = _fetchall(cur)
     _release(conn)
 

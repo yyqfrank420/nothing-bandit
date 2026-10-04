@@ -6,7 +6,7 @@ Purpose: HTTP API server for the nothing-bandit demo. Exposes simulation control
 Connects to: simulator.py  (run_full_simulation)
              database.py   (setup_database, get_all_results, get_all_bandit_states,
                             get_current_day, reset_simulation, insert_shock,
-                            get_active_shocks, clear_shocks)
+                            get_shocks, clear_shocks)
              channels.py   (CHANNELS for DB seeding and reset)
              shocks.py     (SHOCK_EVENTS for random shock selection)
 Inputs:  HTTP requests from frontend (localhost:5173)
@@ -32,7 +32,7 @@ from typing import Optional
 from channels import CHANNELS
 from database import (
     clear_shocks,
-    get_active_shocks,
+    get_shocks,
     get_all_bandit_states,
     get_all_results,
     get_current_day,
@@ -172,6 +172,20 @@ def bandit_states():
     return get_all_bandit_states()
 
 
+def _enrich_shock(shock: dict, current_day: int) -> dict:
+    channel_names = {channel["id"]: channel["name"] for channel in CHANNELS}
+    return {
+        **shock,
+        "affected_channel_names": [
+            channel_names.get(channel_id, str(channel_id))
+            for channel_id in shock["affected_channel_ids"]
+        ],
+        "start_day": shock["triggered_on_day"] + 1,
+        # Aging includes expired rows, so this reconstructs the original inclusive end.
+        "end_day": current_day + shock["days_remaining"],
+    }
+
+
 @app.post("/shock")
 def shock():
     """
@@ -209,18 +223,22 @@ def shock():
         triggered_on_day=current_day,
     )
 
-    # Map channel IDs to names for a human-readable response.
-    channel_names = {ch["id"]: ch["name"] for ch in CHANNELS}
-    affected_names = [channel_names[cid] for cid in event["affected_channel_ids"]]
+    enriched = _enrich_shock({
+        "affected_channel_ids": event["affected_channel_ids"],
+        "triggered_on_day": current_day,
+        "days_remaining": duration,
+    }, current_day)
 
     return {
         "id":                  shock_id,
         "name":                event["name"],
         "description":         event["description"],
-        "affected_channels":   affected_names,
+        "affected_channels":   enriched["affected_channel_names"],
         "multipliers":         event["multipliers"],
         "duration_days":       duration,
         "triggered_on_day":    current_day,
+        "start_day":           enriched["start_day"],
+        "end_day":             enriched["end_day"],
     }
 
 
@@ -230,41 +248,21 @@ def active_shocks():
     Return all currently active shock rows.
     Used on page reload to restore shock banner state.
     """
-    shocks = get_active_shocks()
-
-    # Enrich with human-readable channel names.
-    channel_names = {ch["id"]: ch["name"] for ch in CHANNELS}
-    for shock in shocks:
-        shock["affected_channel_names"] = [
-            channel_names.get(cid, str(cid))
-            for cid in shock["affected_channel_ids"]
-        ]
-    return shocks
+    current_day = get_current_day()
+    return [_enrich_shock(shock, current_day) for shock in get_shocks()]
 
 
 @app.get("/state")
 def state():
-    """
-    Combined initial-load endpoint — returns results, bandit states, and active shocks
-    in a single round-trip.
-
-    Replaces the three separate GET calls (results + bandit-states + active-shocks) that
-    the frontend made on mount. On serverless platforms like Vercel this matters because
-    each HTTP request is a separate cold-start candidate; one call = one cold start.
-    """
-    shocks = get_active_shocks()
-    channel_names = {ch["id"]: ch["name"] for ch in CHANNELS}
-    for shock in shocks:
-        shock["affected_channel_names"] = [
-            channel_names.get(cid, str(cid))
-            for cid in shock["affected_channel_ids"]
-        ]
-
+    """Return results, bandit states, and complete shock history for initial load."""
+    current_day = get_current_day()
+    shocks = [_enrich_shock(shock, current_day) for shock in get_shocks(active_only=False)]
     return {
         "results":       get_all_results(),
         "bandit_states": get_all_bandit_states(),
-        "active_shocks": shocks,
-        "current_day":   get_current_day(),
+        "shock_events":  shocks,
+        "active_shocks": [shock for shock in shocks if shock["days_remaining"] > 0],
+        "current_day":   current_day,
     }
 
 

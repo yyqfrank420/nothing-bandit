@@ -7,7 +7,7 @@
  * Inputs:
  *   results     — all daily_results rows (filtered to this objective + bandit)
  *   objective   — 'ctr' | 'roas' | 'cac'
- *   shockEvents — array of shock objects with triggered_on_day field
+ *   shockEvents — array of shock objects with affected start_day/end_day dates
  *   currentDay  — highest simulated day (for x-axis domain)
  * Outputs: SVG element managed entirely by D3
  *
@@ -34,7 +34,7 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
     if (!results || results.length === 0 || !svgRef.current || W === 0) return;
 
     const H = 170;
-    const margin = { top: 8, right: 38, bottom: 28, left: 42 };  // right margin for $ axis
+    const margin = { top: 12, right: 50, bottom: 32, left: 48 };
     const innerW = W - margin.left - margin.right;
     const innerH = H - margin.top - margin.bottom;
 
@@ -144,18 +144,32 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
       .style("border", "1px solid #2A2A2A")
       .style("border-radius", "3px")
       .style("padding", "8px 10px")
-      .style("font-size", "11px")
+      .style("font-size", "12px")
       .style("font-family", "LetteraMonoLL, monospace")
-      .style("color", "#C0C0C0")
+      .style("color", "var(--color-text)")
       .style("pointer-events", "none")
       .style("opacity", 0)
       .style("z-index", 200)
-      .style("line-height", "1.8")
+      .style("line-height", "1.6")
+      .style("box-sizing", "border-box")
+      .style("width", "max-content")
+      .style("max-width", "min(320px, calc(100vw - 16px))")
+      .style("max-height", "calc(100vh - 16px)")
+      .style("overflow", "auto")
+      .style("overflow-wrap", "anywhere")
       .style("transition", "opacity 80ms");
+
+    function showTooltip(event, content) {
+      tooltip.html(content).style("opacity", 1);
+      const { width, height } = tooltip.node().getBoundingClientRect();
+      const left = Math.max(8, Math.min(event.clientX + 14, window.innerWidth - width - 8));
+      const top = Math.max(8, Math.min(event.clientY - 14, window.innerHeight - height - 8));
+      tooltip.style("left", `${left}px`).style("top", `${top}px`);
+    }
 
     // Shock event vertical lines + transparent hit-areas for hover tooltips
     shockEvents.forEach((shock) => {
-      const shockDay = shock.triggered_on_day ?? shock.day;
+      const shockDay = shock.start_day;
       if (shockDay > 0 && shockDay <= (currentDay || 183)) {
         const sx = xScale(shockDay);
 
@@ -168,28 +182,18 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
           .attr("stroke-dasharray", "3,4")
           .attr("opacity", 0.45);
 
-        g.append("text")
-          .attr("x", sx + 3).attr("y", 8)
-          .attr("fill", "#FF4444")
-          .attr("font-size", "8px")
-          .attr("font-family", "LetteraMonoLL, monospace")
-          .text("⚡");
-
         // ±8px wide hit-area — full chart height — triggers tooltip on hover
         g.append("rect")
+          .attr("class", "shock-hit-area")
           .attr("x", sx - 8).attr("y", 0)
           .attr("width", 16).attr("height", innerH)
           .attr("fill", "transparent")
           .on("mouseenter", function (event) {
-            tooltip
-              .style("opacity", 1)
-              .style("left", `${event.clientX + 14}px`)
-              .style("top", `${event.clientY - 14}px`)
-              .html(
-                `<div style="color:#FF4444;font-size:9px;margin-bottom:5px;letter-spacing:0.1em">⚡ ${shock.name}</div>` +
-                `<div style="color:#C0C0C0;font-size:10px;margin-bottom:6px;max-width:200px;white-space:normal;line-height:1.5">${shock.description}</div>` +
-                `<div style="color:#555;font-size:9px">Day ${shockDay} · ${shock.duration_days ?? shock.days_remaining ?? "?"} days</div>`
-              );
+            showTooltip(event,
+              `<div style="color:var(--color-negative);margin-bottom:5px">${shock.name}</div>` +
+              `<div style="color:var(--color-text);margin-bottom:6px">${shock.description}</div>` +
+              `<div style="color:var(--color-text-2)">Days ${shockDay}-${shock.end_day}</div>`
+            );
           })
           .on("mouseleave", () => tooltip.style("opacity", 0));
       }
@@ -200,14 +204,14 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
       .attr("transform", `translate(0,${innerH})`)
       .call(
         d3.axisBottom(xScale)
-          .ticks(Math.min(days.length, 5))
+          .tickValues(xScale.ticks(Math.max(2, Math.min(days.length, 5, Math.floor(innerW / 48)))).filter(Number.isInteger))
           .tickFormat((d) => `D${d}`)
           .tickSize(3)
       )
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
       .call((g) => g.selectAll("text")
-        .attr("fill", "#4A4A4A")
-        .attr("font-size", "9px")
+        .style("fill", "var(--color-text-2)")
+        .attr("font-size", "11px")
         .attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
@@ -225,8 +229,8 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
       )
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
       .call((g) => g.selectAll("text")
-        .attr("fill", "#4A4A4A")
-        .attr("font-size", "9px")
+        .style("fill", "var(--color-text-2)")
+        .attr("font-size", "11px")
         .attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
@@ -241,8 +245,8 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
       )
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
       .call((g) => g.selectAll("text")
-        .attr("fill", "#333")
-        .attr("font-size", "9px")
+        .style("fill", "var(--color-text-2)")
+        .attr("font-size", "11px")
         .attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
@@ -266,17 +270,15 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
             const amt = entry[id] || 0;
             const pct = Math.round(amt / totalBudget * 100);
             const dol = amt >= 1000 ? `$${(amt / 1000).toFixed(1)}k` : `$${amt.toFixed(0)}`;
-            return `<span style="color:${CHANNEL_COLORS[id]}">${CHANNEL_NAMES[id]}</span>: ${pct}% <span style="color:#555">(${dol})</span>`;
+            return `<span style="color:${CHANNEL_COLORS[id]}">${CHANNEL_NAMES[id]}</span>: ${pct}% <span style="color:var(--color-text-2)">(${dol})</span>`;
           })
           .join("<br/>");
 
-        tooltip
-          .style("opacity", 1)
-          .style("left", `${event.clientX + 14}px`)
-          .style("top", `${event.clientY - 14}px`)
-          .html(`<div style="color:#666;font-size:9px;margin-bottom:4px">DAY ${day}</div>${lines}`);
+        showTooltip(event, `<div style="color:var(--color-text-2);margin-bottom:4px">DAY ${day}</div>${lines}`);
       })
       .on("mouseleave", () => tooltip.style("opacity", 0));
+
+    g.selectAll(".shock-hit-area").raise();
 
   }, [results, objective, shockEvents, currentDay, W]);
 
