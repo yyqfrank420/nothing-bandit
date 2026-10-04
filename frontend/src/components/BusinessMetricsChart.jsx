@@ -128,7 +128,7 @@ function useSeries(results, activeObjective) {
 // Shown on day 0 — values at zero, prompts user to simulate.
 function ZeroKpiCard({ kpi }) {
   return (
-    <div style={{
+    <div className="business-kpi-card" style={{
       padding: "16px 20px",
       background: "#111",
       border: "1px solid #282828",
@@ -136,16 +136,15 @@ function ZeroKpiCard({ kpi }) {
       display: "flex",
       flexDirection: "column",
       gap: "8px",
-      minWidth: "140px",
     }}>
-      <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+      <div style={{ fontSize: "10px", color: "#A0A0A0", letterSpacing: "0.06em", textTransform: "uppercase" }}>
         {kpi.label}
       </div>
-      <div style={{ fontFamily: "Ndot55, monospace", fontSize: "22px", color: "#282828", lineHeight: 1 }}>
+      <div style={{ fontFamily: "Ndot55, monospace", fontSize: "22px", color: "#888", lineHeight: 1 }}>
         {kpi.shortFmt(0)}
       </div>
       {/* Replaced "0.0% vs static" — avoids "is this broken?" reaction on day 0 */}
-      <div style={{ fontSize: "9px", color: "#333", fontStyle: "italic" }}>
+      <div style={{ fontSize: "10px", color: "#A0A0A0" }}>
         simulate to populate
       </div>
     </div>
@@ -174,9 +173,22 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
 
   const absDiff = Math.abs(bv - sv);
   const betterLabel = kpi.higherBetter ? "higher is better" : "lower is better";
+  const showTooltip = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = Math.min(280, window.innerWidth - 32);
+    setTooltipPos({
+      x: Math.max(16 + width / 2, Math.min(rect.left + rect.width / 2, window.innerWidth - 16 - width / 2)),
+      y: rect.bottom + 200 < window.innerHeight ? rect.bottom + 10 : Math.max(16, rect.top - 190),
+      width,
+    });
+  };
 
   return (
     <div
+      className="business-kpi-card"
+      tabIndex={0}
+      role="group"
+      aria-label={`${kpi.label}: Bandit ${kpi.format(bv)}, static ${kpi.format(sv)}. ${deltaStr} vs static. ${betterLabel}. ${kpi.format(absDiff)} absolute difference.`}
       style={{
         padding: "16px 20px",
         background: "#111",
@@ -185,17 +197,18 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
         display: "flex",
         flexDirection: "column",
         gap: "8px",
-        minWidth: "140px",
         transition: "border-color 400ms ease",
         cursor: "default",
       }}
-      onMouseEnter={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.bottom + 10 });
-      }}
+      onMouseEnter={showTooltip}
       onMouseLeave={() => setTooltipPos(null)}
+      onFocus={showTooltip}
+      onBlur={() => setTooltipPos(null)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setTooltipPos(null);
+      }}
     >
-      <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+      <div style={{ fontSize: "10px", color: "#A0A0A0", letterSpacing: "0.06em", textTransform: "uppercase" }}>
         {kpi.label}
       </div>
       <div style={{
@@ -217,12 +230,12 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
         }}>
           {deltaStr}
         </span>
-        <span style={{ fontSize: "10px", color: "#555" }}>vs static</span>
+        <span style={{ fontSize: "10px", color: "#A0A0A0" }}>vs static</span>
       </div>
 
       {/* Hover pane — rendered at fixed viewport position to escape card overflow bounds */}
       {tooltipPos && (
-        <div style={{
+        <div aria-hidden="true" style={{
           position: "fixed",
           left: `${tooltipPos.x}px`,
           top: `${tooltipPos.y}px`,
@@ -232,25 +245,25 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
           border: "1px solid #2A2A2A",
           borderRadius: "4px",
           padding: "12px 14px",
-          minWidth: "190px",
+          width: `${tooltipPos.width}px`,
           fontFamily: "LetteraMonoLL, monospace",
           fontSize: "10px",
           lineHeight: "1.8",
           color: "#C0C0C0",
           pointerEvents: "none",
           boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-          whiteSpace: "nowrap",
+          whiteSpace: "normal",
         }}>
-          <div style={{ color: "#555", fontSize: "9px", marginBottom: "8px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          <div style={{ color: "#A0A0A0", fontSize: "10px", marginBottom: "8px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
             {kpi.label} · {betterLabel}
           </div>
           <div><span style={{ color: "#4ADE80" }}>Bandit</span>: {kpi.format(bv)}</div>
-          <div><span style={{ color: "#555" }}>Static</span>: {kpi.format(sv)}</div>
+          <div><span style={{ color: "#A0A0A0" }}>Static</span>: {kpi.format(sv)}</div>
           <div style={{ marginTop: "6px", borderTop: "1px solid #1E1E1E", paddingTop: "6px" }}>
             <span style={{ color: deltaColor }}>{deltaStr}</span>
-            <span style={{ color: "#555", marginLeft: "8px" }}>vs static baseline</span>
+            <span style={{ color: "#A0A0A0", marginLeft: "8px" }}>vs static baseline</span>
           </div>
-          <div style={{ color: "#5A5A5A", marginTop: "2px" }}>
+          <div style={{ color: "#A0A0A0", marginTop: "2px" }}>
             {kpi.format(absDiff)} absolute difference
           </div>
         </div>
@@ -335,7 +348,7 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
     // Static line
     g.append("path")
       .attr("fill", "none")
-      .attr("stroke", "#333")
+      .attr("stroke", "#888")
       .attr("stroke-width", 1.5)
       .attr("stroke-dasharray", "4,4")
       .attr("d", lineGen(staticSeries));
@@ -355,7 +368,7 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
         .tickFormat((d) => `D${d}`)
         .tickSize(3))
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
-      .call((g) => g.selectAll("text").attr("fill", "#555").attr("font-size", "9px").attr("font-family", "LetteraMonoLL, monospace"))
+      .call((g) => g.selectAll("text").attr("fill", "#A0A0A0").attr("font-size", "10px").attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
     g.append("g")
@@ -364,7 +377,7 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
         .tickFormat(kpi.format)
         .tickSize(3))
       .call((g) => g.select(".domain").attr("stroke", "#282828"))
-      .call((g) => g.selectAll("text").attr("fill", "#555").attr("font-size", "9px").attr("font-family", "LetteraMonoLL, monospace"))
+      .call((g) => g.selectAll("text").attr("fill", "#A0A0A0").attr("font-size", "10px").attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
     // -----------------------------------------------------------------------
@@ -444,13 +457,13 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
           .style("left", `${event.clientX + 14}px`)
           .style("top",  `${event.clientY - 14}px`)
           .html(
-            `<div style="color:#666;font-size:9px;margin-bottom:4px;letter-spacing:0.1em">` +
+            `<div style="color:#A0A0A0;font-size:10px;margin-bottom:4px;letter-spacing:0.1em">` +
             `DAY ${day} · ${kpi.label.toUpperCase()}</div>` +
             `<span style="color:#4ADE80">Bandit</span>: ${kpi.format(bv)}<br/>` +
-            `<span style="color:#555">Static</span>: ${kpi.format(sv ?? 0)}` +
+            `<span style="color:#A0A0A0">Static</span>: ${kpi.format(sv ?? 0)}` +
             `<div style="margin-top:5px;border-top:1px solid #1E1E1E;padding-top:5px">` +
             `<span style="color:${deltaColor}">${deltaStr}</span>` +
-            `<span style="color:#444;margin-left:6px">vs static</span></div>`
+            `<span style="color:#A0A0A0;margin-left:6px">vs static</span></div>`
           );
       })
       .on("mouseleave", () => {
@@ -463,12 +476,12 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
   }, [banditSeries, staticSeries, currentDay, kpi, W]);
 
   return (
-    <div style={{ background: "#111", border: "1px solid #1E1E1E", borderRadius: "4px", padding: "14px 14px 8px" }}>
-      <div style={{ fontSize: "10px", color: "#666", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>
+    <div className="business-chart-panel" style={{ background: "#111", border: "1px solid #1E1E1E", borderRadius: "4px", padding: "14px 14px 8px" }}>
+      <div style={{ fontSize: "10px", color: "#A0A0A0", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>
         {kpi.label}
       </div>
       <div ref={containerRef} style={{ width: "100%" }}>
-        <svg ref={svgRef} style={{ display: "block", width: "100%" }} />
+        <svg ref={svgRef} role="img" aria-label={`${kpi.label}, bandit compared with static allocation over time`} style={{ display: "block", width: "100%" }} />
       </div>
     </div>
   );
@@ -476,35 +489,27 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
 
 // Toggle button for objective filter.
 // Active tab uses red border + red-tinted bg so the selected state is unmistakable.
-function ObjTab({ label, active, onClick }) {
+function ObjTab({ label, description, active, onClick }) {
   return (
     <button
+      className="business-objective-tab"
+      type="button"
+      aria-label={description}
+      aria-pressed={active}
       onClick={onClick}
       style={{
-        padding: "5px 12px",
+        padding: "10px 12px",
         borderRadius: "3px",
         border: `1px solid ${active ? "var(--color-accent)" : "#222"}`,
         background: active ? "var(--color-accent-tint)" : "transparent",
-        color: active ? "#E0E0E0" : "#444",
-        fontSize: "10px",
+        color: active ? "#E0E0E0" : "#A0A0A0",
+        fontSize: "11px",
         letterSpacing: "0.07em",
         textTransform: "uppercase",
         cursor: "pointer",
         fontFamily: "LetteraMonoLL, monospace",
-        transition: "all 180ms ease",
+        transition: "border-color 180ms ease, background-color 180ms ease",
         whiteSpace: "nowrap",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          e.currentTarget.style.borderColor = "#333";
-          e.currentTarget.style.color = "#888";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!active) {
-          e.currentTarget.style.borderColor = "#222";
-          e.currentTarget.style.color = "#444";
-        }
       }}
     >
       {label}
@@ -522,11 +527,10 @@ export default function BusinessMetricsChart({ results, currentDay }) {
   const isEmpty = banditSeries.length === 0;
 
   return (
-    <div style={{
+    <div className="business-metrics" style={{
       background: "#0F0F0F",
       border: "1px solid var(--color-border)",
       borderRadius: "4px",
-      padding: "24px",
     }}>
       {/* Header: objective toggle tabs */}
       <div style={{
@@ -549,19 +553,20 @@ export default function BusinessMetricsChart({ results, currentDay }) {
           </span>
           {/* Sub-label confirms the tab click actually did something */}
           <span style={{
-            fontSize: "9px",
-            color: "#555",
+            fontSize: "10px",
+            color: "#A0A0A0",
             fontFamily: "LetteraMonoLL, monospace",
             letterSpacing: "0.06em",
           }}>
             Filtering: {activeObjective === "all" ? "all objectives (avg)" : activeObjective.toUpperCase()}
           </span>
         </div>
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+        <div role="group" aria-label="Filter business metrics by objective" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
           {["all", "ctr", "roas", "cac"].map((obj) => (
             <ObjTab
               key={obj}
-              label={obj === "all" ? "All Avg" : obj.toUpperCase()}
+              label={obj === "all" ? "All (avg)" : obj.toUpperCase()}
+              description={OBJECTIVE_LABELS[obj]}
               active={activeObjective === obj}
               onClick={() => setActiveObjective(obj)}
             />
@@ -584,17 +589,12 @@ export default function BusinessMetricsChart({ results, currentDay }) {
         }}>
           <span style={{ color: "#F97316" }}>⚠ You're viewing CTR-objective results.</span>{" "}
           Maximising click-through rate can attract high-volume but low-quality traffic — wrong audience segments that don't convert.
-          {" "}<span style={{ color: "#555" }}>ROAS and CAC tabs show objectives that directly track revenue and acquisition efficiency.</span>
+          {" "}<span style={{ color: "#A0A0A0" }}>ROAS and CAC tabs show objectives that directly track revenue and acquisition efficiency.</span>
         </div>
       )}
 
       {/* Summary KPI cards — show zeroes on day 0 for realism */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
-        gap: "12px",
-        marginBottom: "24px",
-      }}>
+      <div className="business-kpi-grid">
         {KPIS.map((kpi) => (
           isEmpty
             ? <ZeroKpiCard key={kpi.key} kpi={kpi} />
@@ -604,12 +604,7 @@ export default function BusinessMetricsChart({ results, currentDay }) {
 
       {/* 2×2 chart grid — hidden on day 0 (nothing to plot) */}
       {!isEmpty && (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gridTemplateRows: "auto auto",
-          gap: "16px",
-        }}>
+        <div className="business-chart-grid">
           {KPIS.map((kpi) => (
             <KpiChart
               key={kpi.key}
