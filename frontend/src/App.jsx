@@ -1,17 +1,3 @@
-/**
- * File: App.jsx
- * Language: JavaScript (React 18)
- * Purpose: Root application shell. Manages global state, time controls, shock events,
- *          and lays out all chart components in the Nothing brand visual language.
- * Connects to: api/client.js (all fetch calls)
- *              components/BudgetAllocationChart.jsx
- *              components/BanditVsStaticChart.jsx
- *              components/BanditConfidenceChart.jsx
- *              components/BusinessMetricsChart.jsx
- * Inputs:  User interactions (buttons), backend API responses
- * Outputs: Full-page dashboard UI
- */
-
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   getState,
@@ -27,10 +13,6 @@ import SettingsPanel, { DEFAULT_SETTINGS } from "./components/SettingsPanel.jsx"
 import ShockImpactPanel from "./components/ShockImpactPanel.jsx";
 import LandingPage from "./components/LandingPage.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const OBJECTIVES = ["ctr", "roas", "cac"];
 
@@ -52,14 +34,13 @@ const OBJECTIVE_DESCRIPTIONS = {
   cac:  "Minimise cost to acquire",
 };
 
-// Each channel keeps the same colour throughout every chart.
 export const CHANNEL_COLORS = {
-  1: "#F97316",  // Tech KOL      (orange — swapped with Generic KOL to separate from Instagram pink)
-  2: "#A78BFA",  // Design KOL
-  3: "#4ECDC4",  // Generic KOL   (teal — swapped with Tech KOL, now clearly distinct from Instagram pink)
-  4: "#E879A0",  // Instagram Ads
-  5: "#22D3EE",  // TikTok Ads
-  6: "#4ADE80",  // Google Search
+  1: "#F97316",
+  2: "#A78BFA",
+  3: "#4ECDC4",
+  4: "#E879A0",
+  5: "#22D3EE",
+  6: "#4ADE80",
 };
 
 export const CHANNEL_NAMES = {
@@ -71,25 +52,24 @@ export const CHANNEL_NAMES = {
   6: "Google Search",
 };
 
-const MAX_DAYS = 183;  // full 6-month campaign
+const MAX_DAYS = 183;
 
-// Plain-English descriptions for each channel — shown on hover in the channel legend.
-// Values reflect the true parameters from channels.py.
+// Baseline metric values match channels.py.
 const CHANNEL_INFO = {
   1: {
-    what: "Tech influencers — YouTube reviewers & Twitter personalities",
+    what: "Technology influencers",
     ctr:  "4.5%",
     roas: "2.8× return on spend",
     cac:  "$120 per customer",
   },
   2: {
-    what: "Design & aesthetic influencers — Figma creators, creative Twitter",
+    what: "Design influencers",
     ctr:  "3.0%",
     roas: "3.5× return on spend",
     cac:  "$145 per customer",
   },
   3: {
-    what: "Broad-reach lifestyle influencers — general audience",
+    what: "Lifestyle influencers with broad audiences",
     ctr:  "2.0%",
     roas: "1.8× return on spend",
     cac:  "$220 per customer",
@@ -114,11 +94,6 @@ const CHANNEL_INFO = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Small UI primitives
-// ---------------------------------------------------------------------------
-
-// Keep the button name visible while an operation is pending.
 function Btn({ onClick, disabled, variant = "default", children, title, spinning = false }) {
   return (
     <button className={`dashboard-button dashboard-button--${variant}`}
@@ -159,7 +134,6 @@ function ShockBanner({ shock, onDismiss, onViewImpact }) {
   );
 }
 
-// Floating info card for the channel legend — shows plain-English parameters on hover.
 function ChannelTooltip({ channelId, x, y, onEnter, onLeave, onBlur, onDismiss }) {
   const tooltipRef = useRef(null);
   useLayoutEffect(() => {
@@ -210,8 +184,6 @@ function ChannelTooltip({ channelId, x, y, onEnter, onLeave, onBlur, onDismiss }
   );
 }
 
-// Full-screen overlay — only shown for multi-day ops (week/month), not for single-day clicks.
-// Single-day (+1 Day) shows an inline spinner inside the button instead.
 function LoadingOverlay({ visible, label = "Simulating..." }) {
   if (!visible) return null;
   return (
@@ -235,20 +207,14 @@ function LoadingOverlay({ visible, label = "Simulating..." }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main App
-// ---------------------------------------------------------------------------
-
 export default function App() {
   const [results, setResults] = useState([]);
   const [banditStates, setBanditStates] = useState([]);
-  const [currentDay, setCurrentDay] = useState(0);   // highest simulated day
-  const [viewDay, setViewDay] = useState(0);          // slider position (replay cursor)
-  // isLoadingDays: how many days the current simulate call is for.
-  // 0 = idle, 1 = +1 Day (inline spinner only), >1 = full overlay for multi-day ops.
+  const [currentDay, setCurrentDay] = useState(0);
+  const [viewDay, setViewDay] = useState(0);
   const [isLoadingDays, setIsLoadingDays] = useState(0);
   const [operationBusy, setOperationBusy] = useState(false);
-  const [simulatingLabel, setSimulatingLabel] = useState("");  // inline status text
+  const [simulatingLabel, setSimulatingLabel] = useState("");
   const [autoRunning, setAutoRunning] = useState(false);
   const [activeShock, setActiveShock] = useState(null);
   const [shockEvents, setShockEvents] = useState([]);
@@ -257,29 +223,24 @@ export default function App() {
   const [shockPending, setShockPending] = useState(false);
   const [shocksExhausted, setShocksExhausted] = useState(false);
   const tooltipDismissTimerRef = useRef(null);
-  const [channelTooltip, setChannelTooltip] = useState(null);  // { channelId, x, y }
+  const [channelTooltip, setChannelTooltip] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  // null = unknown (mount not yet complete); true = show landing; false = show dashboard.
+  // null represents initial load before choosing the landing page or dashboard.
   const [showLanding, setShowLanding] = useState(null);
-  // true = guided tour is active (triggered by "Get Started" on landing page).
   const [tourActive, setTourActive] = useState(false);
-  // Ref so auto interval always reads current settings without stale closure.
+  // Timer callbacks read current settings through this ref.
   const settingsRef = useRef(DEFAULT_SETTINGS);
-  // Ref for the explicit View impact action.
   const shockPanelRef = useRef(null);
   const headerRef = useRef(null);
   const autoIntervalRef   = useRef(null);
-  const sequentialRunning = useRef(false);  // true while +1Wk / +1Mo sequential loop is running
+  const sequentialRunning = useRef(false);
   const loadingRef        = useRef(false);
   const currentDayRef     = useRef(0);
-  const viewDayRef        = useRef(0);      // ref so slider onChange can read it without stale closure
+  const viewDayRef        = useRef(0);
 
   useEffect(() => () => clearTimeout(tooltipDismissTimerRef.current), []);
 
-  // Load existing data on mount so charts restore after page refresh.
-  // Uses /api/state (single round-trip) instead of three parallel GETs —
-  // on serverless (Vercel) this avoids 3 separate cold-starts on page load.
   useEffect(() => {
     async function load() {
       try {
@@ -292,16 +253,16 @@ export default function App() {
           setViewDay(maxDay);
           currentDayRef.current = maxDay;
           viewDayRef.current    = maxDay;
-          setShowLanding(false);  // existing data — skip landing
+          setShowLanding(false);
         } else {
-          setShowLanding(true);   // day 0 — show landing
+          setShowLanding(true);
         }
         setShockEvents(events);
         if (shocks.length > 0) setActiveShock(shocks[shocks.length - 1]);
       } catch (e) {
         const msg = e.name === "AbortError"
           ? "The simulation service took too long to respond. Reload the page to try again."
-          : "We couldn't connect to the simulation service. Reload the page to try again.";
+          : "The simulation could not be loaded. Reload to try again.";
         setError(msg);
         setInitialLoadFailed(true);
         setShowLanding(false);
@@ -310,15 +271,12 @@ export default function App() {
     load();
   }, []);
 
-  // Stop auto-run if campaign is complete.
   useEffect(() => {
     if (currentDay >= MAX_DAYS && autoRunning) {
       stopAuto();
     }
   }, [currentDay, autoRunning]);
 
-  // Auto-mode fetcher — one API call per tick, no loading overlay.
-  // Reads settings via ref so the closure is always fresh without needing re-creation.
   const fetchAndMerge = useCallback(async () => {
     if (loadingRef.current) return;
     loadingRef.current = true;
@@ -344,16 +302,13 @@ export default function App() {
     }
   }, []);
 
-  // Simulate handler — ONE backend call for any n_days, then replays the returned rows
-  // client-side one day at a time for smooth chart animation. This avoids the latency of
-  // making 28+ separate API calls for +1 Month while still giving day-by-day visual updates.
+  // Simulate the batch once on the server, then replay its returned days in the client.
   const handleSimulate = useCallback(async (nDays) => {
     if (sequentialRunning.current || loadingRef.current || currentDayRef.current >= MAX_DAYS) return false;
     sequentialRunning.current = true;
     setOperationBusy(true);
     const safe = Math.min(nDays, MAX_DAYS - currentDayRef.current);
 
-    // Single backend call — backend simulates all days at once.
     loadingRef.current = true;
     setIsLoadingDays(safe);
     setError(null);
@@ -375,15 +330,12 @@ export default function App() {
     setSimulatingLabel("");
     setBanditStates(response.bandit_states);
 
-    // Client-side replay — group the returned rows by day, add one day at a time.
-    // No extra API calls: we already have all the data, just staggering the state updates.
     const byDay = new Map();
     response.new_rows.forEach((r) => {
       if (!byDay.has(r.day)) byDay.set(r.day, []);
       byDay.get(r.day).push(r);
     });
     const days = Array.from(byDay.keys()).sort((a, b) => a - b);
-    // Replay speed per day: +1 Day = instant, +1 Week = 500ms (slow, visible), +1 Month = 50ms (fast).
     const gapMs = safe <= 1 ? 0 : safe <= 7 ? 500 : 50;
 
     for (let i = 0; i < days.length; i++) {
@@ -400,7 +352,6 @@ export default function App() {
     return true;
   }, []);
 
-  // stopAuto is defined before startAuto so startAuto's closure can reference it.
   const stopAuto = useCallback(() => {
     setAutoRunning(false);
     if (autoIntervalRef.current) {
@@ -412,7 +363,6 @@ export default function App() {
   const startAuto = () => {
     if (autoRunning || loadingRef.current || sequentialRunning.current || currentDayRef.current >= MAX_DAYS) return;
     setAutoRunning(true);
-    // Use settingsRef.current so we pick up the latest autoIntervalMs without stale closure.
     const ms = settingsRef.current.autoIntervalMs;
     autoIntervalRef.current = setInterval(() => {
       if (currentDayRef.current >= MAX_DAYS) { stopAuto(); return; }
@@ -425,13 +375,10 @@ export default function App() {
     autoRunning ? stopAuto() : startAuto();
   };
 
-  // Ref-wrap handleAutoToggle so the keyboard handler always calls the current version
-  // without needing to re-register the event listener on every render.
+  // Keep the keyboard listener stable while the toggle callback changes.
   const handleAutoToggleRef = useRef(handleAutoToggle);
   useEffect(() => { handleAutoToggleRef.current = handleAutoToggle; });
 
-  // Keep settingsRef in sync with state so closures (fetchAndMerge, startAuto) always see latest.
-  // When auto is running and the interval changes, briefly show a "speed change on next start" note.
   useEffect(() => {
     const prevMs = settingsRef.current.autoIntervalMs;
     settingsRef.current = settings;
@@ -442,7 +389,7 @@ export default function App() {
     }
   }, [settings, autoRunning]);
 
-  // Shortcuts apply only to the dashboard canvas; focused controls retain native keys.
+  // Focused controls keep native keys; shortcuts apply only to the dashboard.
   useEffect(() => {
     const handler = (e) => {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || tourActive || settingsOpen || initialLoadFailed || showLanding !== false) return;
@@ -482,7 +429,7 @@ export default function App() {
       setActiveShock(event);
       setShockEvents((prev) => [...prev, event]);
     } catch (e) {
-      // 409 = all unique events used up — disable the button rather than showing an error bar.
+      // HTTP 409 means the event pool is exhausted; disable further shock requests.
       if (e.message?.includes("409") || e.message?.includes("SHOCKS_EXHAUSTED")) {
         setShocksExhausted(true);
       } else {
@@ -501,7 +448,7 @@ export default function App() {
     setOperationBusy(true);
     setError(null);
     stopAuto();
-    setIsLoadingDays(7);  // show overlay during reset
+    setIsLoadingDays(7);
     try {
       await reset();
       setResults([]);
@@ -515,7 +462,7 @@ export default function App() {
       setActiveShock(null);
       setShockEvents([]);
       setShocksExhausted(false);
-      setShowLanding(true);   // return to landing after reset
+      setShowLanding(true);
     } catch (e) {
       setError("Reset request failed. Reload to check the current campaign state.");
     } finally {
@@ -525,21 +472,12 @@ export default function App() {
     }
   };
 
-  // Filter results to the slider cursor — enables replay without re-simulating.
   const visibleResults = useMemo(
     () => results.filter((r) => r.day <= viewDay),
     [results, viewDay]
   );
   const isReplaying = viewDay < currentDay && currentDay > 0;
 
-
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
-
-  // Landing page is shown on first load (day 0). After Reset it reappears.
-  // null = initial fetch in-flight. Show a loading screen so the user doesn't
-  // see a blank page while waiting for /api/state (hung backend = infinite blank).
   if (initialLoadFailed) {
     return <main className="initial-load-unavailable">
       <span className="brand-dot" aria-hidden="true" />
@@ -587,7 +525,6 @@ export default function App() {
 
   return (
     <>
-      {/* Global keyframe animations */}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -609,8 +546,6 @@ export default function App() {
             }
           }} />
       )}
-
-      {/* Settings panel */}
       <SettingsPanel
         open={settingsOpen}
         settings={settings}
@@ -618,14 +553,8 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onReset={() => setSettings(DEFAULT_SETTINGS)}
       />
-
-      {/* Guided tour — triggered by "Get Started" on landing page */}
       <GuidedTour show={tourActive} onDone={() => setTourActive(false)} />
-
-      {/* Full-screen overlay only for multi-day operations (week/month) */}
       <LoadingOverlay visible={isLoadingDays > 1} label={simulatingLabel || "Resetting simulation..."} />
-
-      {/* Channel legend tooltip */}
       {channelTooltip && <ChannelTooltip {...channelTooltip}
         onEnter={() => clearTimeout(tooltipDismissTimerRef.current)}
         onLeave={() => {
@@ -643,17 +572,11 @@ export default function App() {
           document.querySelector(`[data-channel-id="${channelTooltip.channelId}"]`)?.focus();
           setChannelTooltip(null);
         }} />}
-
-      {/* Page wrapper */}
       <div style={{
         minHeight: "100vh",
         padding: "0 0 64px 0",
         background: "var(--color-bg)",
       }}>
-
-        {/* ----------------------------------------------------------------
-            Header
-            ---------------------------------------------------------------- */}
         <a className="skip-link" href="#dashboard-main">Skip to dashboard</a>
         <header ref={headerRef} className="dashboard-header">
           <div className="dashboard-header-inner">
@@ -662,7 +585,7 @@ export default function App() {
                 <span className="brand-dot" aria-hidden="true" />
                 <div>
                   <h1>Nothing Bandit™</h1>
-                  <p>Budget Allocation System</p>
+                  <p>Budget allocation system</p>
                 </div>
               </div>
               <div className="dashboard-timeline">
@@ -742,8 +665,6 @@ export default function App() {
             </div>
           </div>
         </header>
-
-        {/* Error bar */}
         {error && (
           <div role="alert" style={{
             background: "rgba(255,0,0,0.08)",
@@ -757,12 +678,7 @@ export default function App() {
             <button className="dashboard-button" onClick={() => window.location.reload()} style={{ marginLeft: "16px", padding: "6px 12px", background: "transparent", color: "var(--color-text)", border: "1px solid var(--color-border-2)", font: "inherit" }}>Reload</button>
           </div>
         )}
-
-        {/* ----------------------------------------------------------------
-            Main content — always rendered; charts show day 0 state when empty
-            ---------------------------------------------------------------- */}
         <main className="dashboard-main" id="dashboard-main" tabIndex={-1}>
-          {/* Day 0 call-to-action — shown instead of blank charts */}
           {currentDay === 0 && isLoadingDays === 0 && (
             <div className="dashboard-empty-state">
               <div>
@@ -773,7 +689,7 @@ export default function App() {
                   DAY 0 · AWAITING SIMULATION
                 </span>
                 <span style={{ fontSize: "11px", color: "var(--color-text-2)", marginLeft: "16px" }}>
-                  All metrics at baseline. Click +1 Day or Auto to begin.
+                  No simulated days yet. Use +1 Day or Auto to begin.
                 </span>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
@@ -782,8 +698,6 @@ export default function App() {
               </div>
             </div>
           )}
-
-            {/* Channel legend — shared across all charts */}
             <div className="dashboard-legend" aria-label="Chart legend">
               <span className="legend-label">Channels</span>
               {Object.entries(CHANNEL_NAMES).map(([id, name]) => {
@@ -806,8 +720,6 @@ export default function App() {
                 <span><i className="allocator-line allocator-line--static" aria-hidden="true" />Static</span>
               </div>
             </div>
-
-            {/* Shock impact cards — one card per shock, persists until Reset */}
             <div ref={shockPanelRef}>
               <ShockImpactPanel
                 shockEvents={shockEvents}
@@ -817,11 +729,9 @@ export default function App() {
             </div>
 
             <div className="section-heading" data-tour="allocation-grid">
-              <h2 className="section-title">3 Parallel Bandits</h2>
+              <h2 className="section-title">3 parallel bandits</h2>
               <p className="section-description">Each optimises a different objective independently.</p>
             </div>
-
-            {/* 3-column grid — one column per objective */}
             <div className="objective-grid">
               {OBJECTIVES.map((obj) => (
                 <div key={obj} style={{ background: "var(--color-bg)" }}>
@@ -830,10 +740,8 @@ export default function App() {
                     <p className="objective-name">{OBJECTIVE_LABELS[obj]}</p>
                     <p className="objective-description">{OBJECTIVE_DESCRIPTIONS[obj]}</p>
                   </div>
-
-                  {/* Budget allocation chart */}
                   <div className="objective-plot">
-                    <h4 className="chart-caption">Budget Allocation</h4>
+                    <h4 className="chart-caption">Budget allocation</h4>
                     <BudgetAllocationChart
                       results={visibleResults}
                       objective={obj}
@@ -841,10 +749,8 @@ export default function App() {
                       currentDay={viewDay}
                     />
                   </div>
-
-                  {/* Bandit vs static chart */}
                   <div className="objective-plot objective-plot--comparison">
-                    <h4 className="chart-caption">Bandit vs Static</h4>
+                    <h4 className="chart-caption">Bandit vs static</h4>
                     <p className="chart-description">Running {obj === "cac" ? "CAC" : obj === "roas" ? "ROAS" : "avg CTR"} (cumulative)</p>
                     <BanditVsStaticChart
                       results={visibleResults}
@@ -856,25 +762,21 @@ export default function App() {
                 </div>
               ))}
             </div>
-
-            {/* Business Outcomes — full width, with objective toggle */}
             <section className="dashboard-section" aria-labelledby="business-heading">
               <div className="section-heading" data-tour="business-outcomes">
-                <h2 className="section-title" id="business-heading">Business Outcomes</h2>
-                <p className="section-description">Bandit vs Static Baseline</p>
+                <h2 className="section-title" id="business-heading">Business outcomes</h2>
+                <p className="section-description">Bandit vs static baseline</p>
               </div>
               <BusinessMetricsChart
                 results={visibleResults}
                 currentDay={viewDay}
               />
             </section>
-
-            {/* Bandit Confidence — 3 panels at bottom */}
             <section className="dashboard-section" aria-labelledby="confidence-heading">
               <div className="section-heading">
-                <h2 className="section-title" id="confidence-heading">Bandit Confidence</h2>
-                <p className="section-description">Each curve shows a channel's estimated reward rate. Narrower curves indicate greater certainty.
-                  Dashed lines mark the most likely rate. Adjust reward thresholds in Settings.</p>
+                <h2 className="section-title" id="confidence-heading">Bandit confidence</h2>
+                <p className="section-description">Each curve estimates a channel's chance of meeting its reward threshold. Narrower curves indicate greater certainty.
+                  Dashed lines mark the most likely success rates. Adjust reward thresholds in Settings.</p>
               </div>
               <div className="confidence-grid">
                 {OBJECTIVES.map((obj) => (

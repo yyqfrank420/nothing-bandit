@@ -1,12 +1,4 @@
-/**
- * File: api/client.js
- * Language: JavaScript
- * Purpose: Thin fetch wrappers for all backend API endpoints.
- *          All calls go through /api/... which Vite proxies to localhost:8000.
- * Connects to: App.jsx (called from event handlers and useEffect hooks)
- * Inputs:  Function arguments (n_days for simulate)
- * Outputs: Parsed JSON response objects, or throws on non-2xx status
- */
+// Browser API client. Requests use the same-origin /api routes.
 
 const BASE = "/api";
 
@@ -19,14 +11,7 @@ async function checkResponse(res) {
   return res.json();
 }
 
-/**
- * Run n_days of simulation across all 3 objectives.
- * Accepts optional settings overrides — these are session-scoped and fall back to
- * channels.py defaults on the backend when omitted.
- * @param {number} nDays
- * @param {object|null} settings — {dailyBudget, noiseSigma, rewardCtr, rewardRoas, rewardCac, decayFactor}
- * @returns {Promise<{status, days_run, current_day, new_rows, bandit_states}>}
- */
+/** Run days across all three objectives with optional per-request settings. */
 export async function simulate(nDays, settings = null) {
   const body = { n_days: nDays };
   if (settings) {
@@ -66,16 +51,8 @@ export async function getBanditStates() {
 }
 
 /**
- * Combined initial-load fetch — returns results, bandit_states, active_shocks,
- * and current_day in one round-trip instead of three.
- * On serverless (Vercel), one call = one cold-start instead of three.
- *
- * 10-second AbortController timeout: if the backend port is open but unresponsive
- * (hung uvicorn process, stale connection), fetch would otherwise hang for ~30s.
- * 10s is generous enough to cover Vercel cold starts (typically 1–3s) while
- * failing fast locally when the backend is simply not running.
- *
- * @returns {Promise<{results, bandit_states, active_shocks, current_day}>}
+ * Fetch campaign results, posterior state, complete shock history, and active shocks.
+ * Abort the request after 10 seconds.
  */
 export async function getState() {
   const controller = new AbortController();
@@ -88,10 +65,7 @@ export async function getState() {
   }
 }
 
-/**
- * Trigger a random shock event and return its details.
- * @returns {Promise<{id, name, description, affected_channels, multipliers, duration_days}>}
- */
+/** Trigger a market shock and return its authoritative inclusive day bounds. */
 export async function triggerShock() {
   const res = await fetch(`${BASE}/shock`, { method: "POST" });
   return checkResponse(res);
@@ -116,7 +90,7 @@ export async function reset() {
 }
 
 /**
- * Health check — used to detect if backend is running.
+ * Check whether the service responds.
  * @returns {Promise<{status: "ok"}>}
  */
 export async function healthCheck() {

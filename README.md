@@ -1,64 +1,48 @@
 # Nothing Bandit™
 
-A marketing budget allocation system that uses **Thompson Sampling** — a type of multi-armed bandit algorithm — to figure out which ad channels to bet on, day by day. Built as a prototype for Nothing (consumer tech).
+A Nothing-themed marketing simulation that compares Thompson Sampling with a fixed weighted budget strategy across six channels.
 
-The core idea: instead of splitting budget equally across all channels (the dumb default), the bandit learns which channels are actually working and shifts spend toward them automatically.
+Live app: [multi-armed-bandit.frankyang.studio](https://multi-armed-bandit.frankyang.studio). Hosted on Vercel.
 
----
+## Simulation
 
-## What it does
+The campaign runs for up to 183 days with a default daily budget of $5,000. The channels are Tech KOL, Design KOL, Generic KOL, Instagram Ads, TikTok Ads, and Google Search.
 
-You start with 6 ad channels and a daily budget. The bandit runs 3 parallel experiments — one optimising for **CTR** (clicks), one for **ROAS** (revenue vs spend), one for **CAC** (cost to acquire a customer). Each day it:
+CTR, ROAS, and CAC each use a separate bandit. Both strategies start with the same weighted mix on day one. On subsequent days, the bandit samples a success rate for each channel and splits the budget in proportion to those samples. A channel receives a success update when its observed metric meets the objective's reward threshold. The forgetting setting discounts accumulated evidence.
 
-1. Samples from its beliefs about each channel's performance (the Beta distribution)
-2. Allocates more budget to channels it's more confident will perform well
-3. Observes results and updates its beliefs accordingly
+The fixed strategy allocates 30% to Google Search, 25% to TikTok Ads, 20% to Instagram Ads, 15% to Tech KOL, 7% to Design KOL, and 3% to Generic KOL.
 
-You can watch this happen day-by-day, trigger market shock events, and compare the bandit's performance against a static equal-split baseline.
+Channel rates, daily variation, shocks, and campaign outcomes are simulated. The app does not place ads or use live campaign data. Results depend on the objective, settings, noise, and shocks; either strategy can perform better.
 
----
+## Dashboard
 
-## The 6 channels
+- **Read tutorial** opens the guide and dashboard tour. **+1 Day (skip tutorial)** runs one day and opens the dashboard.
+- **+1 Day**, **+1 Week**, and **+1 Month** advance the campaign. **Auto** runs until paused or the campaign ends. Settings controls its speed.
+- The timeline shows earlier results without running the simulation again.
+- **Shock** adds one of ten preset market events. Events temporarily change selected channel rates and may overlap. Each preset can occur once until Reset.
+- Settings controls the daily budget, noise, reward thresholds, and forgetting. Settings return to their defaults on page reload.
 
-| Channel | Strength | Weakness |
-|---------|----------|----------|
-| Google Search | Best ROAS (4.2×), cheapest CAC ($90) | Lowest raw click rate (1.5%) |
-| Tech KOL | High clicks (4.5% CTR) | Moderate conversion, $120 CAC |
-| Design KOL | Good ROAS (3.5×) | $145 CAC, niche audience |
-| Instagram Ads | Balanced but unremarkable | $175 CAC |
-| TikTok Ads | Highest clicks (5.5%) | Worst ROAS (1.5×), $200 CAC |
-| Generic KOL | — | Worst across the board ($220 CAC) |
+### Charts
 
-The bandit should converge on Google Search + Tech KOL + Design KOL over time.
+**Budget allocation** shows each channel's share of bandit spend. Red lines mark the first affected day of a shock.
 
----
+**Bandit vs static** compares running budget-weighted CTR, running ROAS, or running CAC for the selected objective. Higher CTR and ROAS are better; lower CAC is better. The CAC axis is inverted. The percentage label shows the bandit's relative improvement over static after at least five days.
 
-## Stack
+**Business outcomes** shows revenue, conversions, running CAC, and running ROAS. Objective tabs select one strategy objective or the average across all three.
 
-```
-backend/     Python 3.11 + FastAPI + SQLite
-frontend/    React 18 + D3 v7 + Vite
-```
+**Bandit confidence** shows Beta distributions for the probability of meeting a reward threshold. These curves describe threshold success, rather than the metric value itself.
 
-No cloud services, no paid APIs. Runs entirely on your laptop.
+**Shock impact** compares affected channels before and during an event. The channel legend identifies the chart colors and explains the simulation's baseline assumptions.
 
----
+## Run locally
 
-## How to run it
-
-You need two terminal windows — one for the backend, one for the frontend.
-
-### 1. Backend
+Use Python 3.11 or later and Node.js with npm. Start the backend and frontend in separate terminals.
 
 ```bash
 cd backend
-pip install -r requirements.txt
-uvicorn api:app --reload --reload-dir . --port 8000
+python -m pip install -r requirements.txt
+python -m uvicorn api:app --reload --reload-dir . --port 8000
 ```
-
-You should see: `Uvicorn running on http://127.0.0.1:8000`
-
-### 2. Frontend
 
 ```bash
 cd frontend
@@ -66,109 +50,22 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` in your browser.
+Open [localhost:5173](http://localhost:5173). Vite proxies `/api` requests to the backend on port 8000.
 
----
+## Storage and deployment
 
-## Using the dashboard
+The backend selects PostgreSQL when one of these environment variables is set, in this order:
 
-### Simulating time
+1. `POSTGRES_URL_NON_POOLING`
+2. `POSTGRES_URL`
+3. `DATABASE_URL`
 
-- **+1 Day** — simulate one day. The day counter glows and charts update.
-- **+1 Wk** — simulate 7 days with a slow replay (500ms per day) so you can see the bandit shifting allocation.
-- **+1 Mo** — simulate 30 days fast (50ms per day). Good for seeing the long-run result quickly.
-- **▶ Auto** — continuous simulation at a configurable speed. The dot in the header pulses while running.
+Without a connection URL, it uses SQLite at `backend/bandit.db`. Campaign data is stored in the selected database. PostgreSQL access uses the `psycopg2-binary` dependency.
 
-The **timeline slider** at the top lets you rewind and replay history without re-simulating. A **REPLAY** badge appears when you're viewing an earlier point.
+Vercel builds the React app into `frontend/dist`. Requests under `/api` reach the FastAPI application through `api/index.py`; other routes serve the frontend. The deployment configuration is in `vercel.json`.
 
-### Reading the charts
+## Source
 
-**Budget Allocation** (top section, per objective): stacked area showing how the bandit re-weights channels over time. The static baseline splits evenly.
-
-**Bandit vs Static** (middle section): cumulative revenue (or running ROAS/CAC) for the bandit vs the static allocator. The gap fills green when the bandit is winning. The Δ label in the corner shows the final percentage advantage.
-
-**Business Outcomes** (full width): KPI cards for revenue, ROAS, and CAC with animated numbers. The toggle switches between CTR / ROAS / CAC objective views. Hover any chart for a crosshair tooltip.
-
-**Bandit Confidence** (bottom): Beta distribution curves per channel per objective. A tall, narrow peak = the bandit is confident. A wide, flat curve = still exploring. Winning channels converge to sharp peaks near 1; losers flatten near 0.
-
-**Channel legend**: hover any channel dot to see a plain-English description of that channel's parameters and what role it plays.
-
-### Shock events
-
-Click **⚡ Shock** to trigger a random market shock (a realistic SEA event like a platform algorithm change, a public holiday, or a viral moment). The shock:
-
-- Applies multipliers to affected channels (e.g. TikTok algorithm update → CTR ×1.4, CAC ×1.3)
-- Lasts a fixed number of days
-- Shows a notification banner with the affected channels and duration
-
-After a shock, an **Impact Analysis** strip appears between the channel legend and the charts. Each card shows:
-- The shock name, active day range, and current status (ACTIVE / EXPIRED)
-- The metric multipliers applied
-- A D3 bar chart comparing avg daily revenue per affected channel, before vs during the shock
-- Budget delta for each channel
-
-Multiple shocks can overlap — each gets its own card. Cards persist until you click **Reset**.
-
-### Settings (⚙)
-
-The settings panel adjusts session-scoped hyperparameters — they reset when you reload the page.
-
-- **Daily Budget** — total ad spend per day across all channels (default: $10,000)
-- **Noise σ** — how much random noise to add to observed performance (higher = noisier signals)
-- **Reward Thresholds** — what counts as a "win" for the bandit's binary reward signal. These directly shape the Beta posteriors visible in the confidence charts. Raising a threshold makes the bandit harder to impress → flatter curves → more exploration.
-
----
-
-## Project structure
-
-```
-nothing-bandit/
-├── backend/
-│   ├── api.py          FastAPI app — HTTP endpoints
-│   ├── bandit.py       Thompson Sampling (sample + update)
-│   ├── channels.py     Channel definitions and true parameters
-│   ├── database.py     SQLite — results, bandit states, active shocks
-│   ├── simulator.py    Day-by-day simulation loop
-│   ├── shocks.py       6 SEA market shock event definitions
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx                  Root shell, state, layout
-│   │   ├── api/client.js            Fetch wrappers for all endpoints
-│   │   ├── hooks.js                 useContainerWidth, useAnimatedNumber
-│   │   └── components/
-│   │       ├── BudgetAllocationChart.jsx
-│   │       ├── BanditVsStaticChart.jsx
-│   │       ├── BanditConfidenceChart.jsx
-│   │       ├── BusinessMetricsChart.jsx
-│   │       ├── ShockImpactPanel.jsx
-│   │       └── SettingsPanel.jsx
-│   ├── index.html
-│   └── vite.config.js   Proxies /api → localhost:8000
-├── api/
-│   └── index.py        Vercel serverless entrypoint
-└── vercel.json         Deployment config (SPA rewrites + cache headers)
-```
-
----
-
-## How Thompson Sampling works (plain English)
-
-Imagine you have 6 slot machines. You don't know the payout rate of any of them. You want to find the best one as fast as possible, but you also need to keep pulling to make money.
-
-Thompson Sampling solves this by maintaining a **belief** about each machine — specifically, a Beta(α, β) probability distribution. α counts wins, β counts losses. Each day:
-
-1. **Sample**: randomly draw one value from each machine's belief distribution
-2. **Act**: allocate budget proportional to the sampled values (higher sample → more budget)
-3. **Observe**: did each channel meet the reward threshold? Increment α (win) or β (loss)
-4. **Update**: the distributions narrow around the true value over time
-
-This naturally balances exploration (uncertain channels get sampled high sometimes) and exploitation (clearly good channels consistently win the sample lottery).
-
-The result: the bandit figures out that Google Search is the efficiency winner and shifts most budget there, while keeping a small exploratory allocation to other channels — without anyone telling it the true parameters.
-
----
-
-## Potential deployment (not currently set up)
-
-The app is wired for Vercel. See `api/index.py` for the pre-deployment checklist — the main blocker is that SQLite doesn't work on serverless (ephemeral filesystem). You'd need to swap in Turso, Supabase, or Vercel Postgres before deploying.
+- `backend/`: FastAPI endpoints, simulation, bandit updates, channel assumptions, shocks, and database operations.
+- `frontend/src/`: React dashboard, onboarding, settings, and D3 charts.
+- `api/index.py`: Vercel Python entry point.

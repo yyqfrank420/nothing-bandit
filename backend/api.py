@@ -1,19 +1,6 @@
-"""
-File: api.py
-Language: Python (FastAPI)
-Purpose: HTTP API server for the nothing-bandit demo. Exposes simulation controls,
-         result reads, shock injection, and reset to the React frontend.
-Connects to: simulator.py  (run_full_simulation)
-             database.py   (setup_database, get_all_results, get_all_bandit_states,
-                            get_current_day, reset_simulation, insert_shock,
-                            get_shocks, clear_shocks)
-             channels.py   (CHANNELS for DB seeding and reset)
-             shocks.py     (SHOCK_EVENTS for random shock selection)
-Inputs:  HTTP requests from frontend (localhost:5173)
-Outputs: JSON responses
+"""FastAPI simulation controls, results, and shock history.
 
-Run with:
-    uvicorn api:app --reload --port 8000
+Local development: uvicorn api:app --port 8000.
 """
 
 import random
@@ -51,7 +38,7 @@ from simulator import run_full_simulation
 app = FastAPI(title="Nothing Bandit API", version="1.0.0")
 
 # Allow requests from local Vite dev server and any Vercel deployment.
-# ["*"] is intentional here — this is a public demo prototype with no auth.
+# ["*"] is intentional here; this is a public demo prototype with no auth.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -98,7 +85,7 @@ class SimulateSettings(BaseModel):
     reward_ctr:    Optional[float] = None
     reward_roas:   Optional[float] = None
     reward_cac:    Optional[float] = None
-    decay_factor:  Optional[float] = None   # Bayesian forgetting rate (0–1); default 0.95
+    decay_factor:  Optional[float] = None   # Bayesian forgetting rate (0-1); default 0.95
 
 class SimulateRequest(BaseModel):
     n_days:   int
@@ -111,7 +98,7 @@ class SimulateRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    """Liveness check — returns immediately without touching the DB."""
+    """Liveness check; returns immediately without touching the DB."""
     return {"status": "ok"}
 
 
@@ -147,7 +134,7 @@ def simulate(body: SimulateRequest):
     )
 
     # current_day and bandit_states come from run_full_simulation's in-memory
-    # state — no extra DB round-trips needed after the simulation completes.
+    # state; no extra DB round-trips needed after the simulation completes.
     return {
         "status":        "ok",
         "days_run":      body.n_days,
@@ -174,8 +161,19 @@ def bandit_states():
 
 def _enrich_shock(shock: dict, current_day: int) -> dict:
     channel_names = {channel["id"]: channel["name"] for channel in CHANNELS}
+    # Refresh catalog copy only when it still describes the stored parameters.
+    description = next(
+        (
+            event["description"] for event in SHOCK_EVENTS
+            if event["name"] == shock["name"]
+            and set(event["affected_channel_ids"]) == set(shock["affected_channel_ids"])
+            and event["multipliers"] == shock["multipliers"]
+        ),
+        shock["description"],
+    )
     return {
         **shock,
+        "description": description,
         "affected_channel_names": [
             channel_names.get(channel_id, str(channel_id))
             for channel_id in shock["affected_channel_ids"]
@@ -193,9 +191,9 @@ def shock():
 
     No-repeat rule: each named event can only fire once per session. Already-triggered
     events (including expired ones) are excluded from the pool. This prevents the same
-    shock from appearing twice and ensures variety across 10 unique events.
+    shock from appearing twice within the session.
 
-    Returns 409 when all events have been used — the frontend should disable the button.
+    Returns 409 when all events have been used; the frontend should disable the button.
     """
     triggered = get_triggered_shock_names()  # names of every shock ever fired this session
     available = [e for e in SHOCK_EVENTS if e["name"] not in triggered]
@@ -224,7 +222,10 @@ def shock():
     )
 
     enriched = _enrich_shock({
+        "name": event["name"],
+        "description": event["description"],
         "affected_channel_ids": event["affected_channel_ids"],
+        "multipliers": event["multipliers"],
         "triggered_on_day": current_day,
         "days_remaining": duration,
     }, current_day)

@@ -1,37 +1,13 @@
-/**
- * File: BanditVsStaticChart.jsx
- * Language: JavaScript (React 18 + D3 v7)
- * Purpose: Dual line chart comparing bandit vs static allocator on a single objective.
- * Connects to: App.jsx
- * Inputs:
- *   results     — all daily_results rows
- *   objective   — 'ctr' | 'roas' | 'cac'
- *   shockEvents — for vertical marker lines
- *   currentDay  — x-axis upper bound
- * Outputs: SVG element
- *
- * Metric per objective:
- *   CTR  → running budget-weighted avg CTR: cumΣ(budget×ctr) / cumΣ(budget)
- *   ROAS → running ROAS ratio: cumΣ(revenue) / cumΣ(budget)
- *   CAC  → running average CAC: cumΣ(budget) / cumΣ(conversions)
- *
- * CAC Y-axis is INVERTED — lower value = top of chart = visually "winning".
- * This matches how all three objectives look: the better allocator's line
- * is always on top. Without inversion, lower-is-better metrics confuse readers.
- *
- * No D3 transitions — re-draws are instant so 1-day/150ms auto mode stays smooth.
- */
-
 import * as d3 from "d3";
 import React, { useEffect, useRef } from "react";
 import { useContainerWidth } from "../hooks.js";
+import { formatPercent } from "../metricFormatting.js";
 
 export default function BanditVsStaticChart({ results, objective, shockEvents = [], currentDay }) {
   const [containerRef, W] = useContainerWidth();
   const svgRef = useRef(null);
 
   useEffect(() => {
-    // Always clear first — prevents stale chart persisting when data is reset to empty.
     if (svgRef.current) d3.select(svgRef.current).selectAll("*").remove();
     if (!results || results.length === 0 || !svgRef.current || W === 0) return;
 
@@ -44,12 +20,7 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
 
     const isCAC  = objective === "cac";
     const isROAS = objective === "roas";
-    // CTR  objective: budget-weighted running avg CTR — y-axis reads "3.2%".
-    //                 Measures whether the bandit directs budget to higher-CTR channels.
-    // ROAS objective: running ROAS ratio (revenue/budget) — y-axis reads "2.5×".
-    // CAC  objective: running average CAC — y-axis inverted (lower = top = better).
 
-    // Aggregate by (day, allocator).
     const byDayAllocator = d3.rollup(
       results.filter((r) => r.objective === objective),
       (rows) => ({
@@ -58,7 +29,7 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         conversions: d3.sum(rows, (r) => r.conversions),
         // Weighted CTR: each channel contributes its CTR scaled by its budget share.
         // Summing budget*ctr here, then dividing by cumBudget in buildSeries gives
-        // a running budget-weighted average — channels with more spend matter more.
+        // a running budget-weighted average: channels with more spend matter more.
         wtdCtr:      d3.sum(rows, (r) => r.observed_ctr * r.budget_allocated),
       }),
       (r) => r.day,
@@ -79,11 +50,11 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         cumWtdCtr  += d.wtdCtr;
         let value;
         if (isCAC) {
-          value = cumConv > 0 ? cumBudget / cumConv : 0;               // running CAC ($)
+          value = cumConv > 0 ? cumBudget / cumConv : 0;
         } else if (isROAS) {
-          value = cumBudget > 0 ? cumRevenue / cumBudget : 0;          // running ROAS (ratio)
+          value = cumBudget > 0 ? cumRevenue / cumBudget : 0;
         } else {
-          value = cumBudget > 0 ? cumWtdCtr / cumBudget : 0;          // running budget-weighted avg CTR
+          value = cumBudget > 0 ? cumWtdCtr / cumBudget : 0;
         }
         return { day, value };
       });
@@ -102,7 +73,7 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
     // For CAC: invert so lower (better) = higher on screen.
     // domain([max, min]) with range([innerH, 0]) puts min at top.
     const yDomain = isCAC
-      ? [dataMax + pad, Math.max(0, dataMin - pad)]   // inverted: high value at bottom, low at top
+      ? [dataMax + pad, Math.max(0, dataMin - pad)]
       : [0, dataMax + pad];
 
     const xScale = d3.scaleLinear()
@@ -119,33 +90,19 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         .y((d) => yScale(d.value))
         .curve(d3.curveMonotoneX)(series);
 
-    // -----------------------------------------------------------------------
-    // Render — no transitions
-    // -----------------------------------------------------------------------
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
     svg.attr("width", W).attr("height", H).attr("viewBox", `0 0 ${W} ${H}`);
 
     const fillColor = "#4ADE80";
 
-    // SVG glow filter — applied to the hover dot to give the shooting-star halo effect.
-    const defs = svg.append("defs");
-    const glowId = `bvs-glow-${objective}`;
-    const filter = defs.append("filter").attr("id", glowId).attr("x", "-50%").attr("y", "-50%").attr("width", "200%").attr("height", "200%");
-    filter.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", "3").attr("result", "blur");
-    const merge = filter.append("feMerge");
-    merge.append("feMergeNode").attr("in", "blur");
-    merge.append("feMergeNode").attr("in", "SourceGraphic");
-
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Grid
     g.append("g")
       .call(d3.axisLeft(yScale).ticks(3).tickSize(-innerW).tickFormat(""))
       .call((g) => g.select(".domain").remove())
       .call((g) => g.selectAll("line").attr("stroke", "#1A1A1A").attr("stroke-dasharray", "1,6"));
 
-    // Tooltip — defined before shock events so shock hit-areas can reference it
     const tooltip = d3.select("body").selectAll(".bvs-tooltip").data([null]).join("div")
       .attr("class", "bvs-tooltip")
       .style("position", "fixed")
@@ -176,7 +133,6 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
       tooltip.style("left", `${left}px`).style("top", `${top}px`);
     }
 
-    // Shock lines + transparent hit-areas for hover tooltips
     shockEvents.forEach((shock) => {
       const shockDay = shock.start_day;
       if (shockDay > 0 && shockDay <= (currentDay || 183)) {
@@ -185,13 +141,11 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         g.append("line")
           .attr("x1", sx).attr("x2", sx)
           .attr("y1", 0).attr("y2", innerH)
-          // style() — not attr() — so CSS variable resolves correctly
           .style("stroke", "var(--color-accent)")
           .attr("stroke-width", 1)
           .attr("stroke-dasharray", "3,4")
           .attr("opacity", 0.35);
 
-        // ±8px hit-area — full chart height
         g.append("rect")
           .attr("class", "shock-hit-area")
           .attr("x", sx - 8).attr("y", 0)
@@ -208,21 +162,16 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
       }
     });
 
-    // Fill between the bandit and static lines — shows the competitive gap visually.
-    // y0 = static line position, y1 = bandit line position.
-    // Works for both normal and inverted (CAC) axes: when bandit wins, both lines place
-    // bandit higher on screen (lower y coord), so y0 > y1 regardless of axis direction,
-    // and d3.area() fills between them correctly.
     const staticByDayFill = new Map(staticSeries.map((d) => [d.day, d.value]));
     g.append("path")
-      .attr("fill", "rgba(74,222,128,0.07)")
+      .attr("fill", "var(--color-text-2)")
+      .attr("fill-opacity", 0.07)
       .attr("d", d3.area()
         .x((d) => xScale(d.day))
         .y0((d) => yScale(staticByDayFill.get(d.day) ?? d.value))
         .y1((d) => yScale(d.value))
         .curve(d3.curveMonotoneX)(banditSeries));
 
-    // Static line — dashed, muted grey
     g.append("path")
       .attr("fill", "none")
       .attr("stroke", "#3A3A3A")
@@ -230,14 +179,12 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
       .attr("stroke-dasharray", "4,4")
       .attr("d", lineGen(staticSeries));
 
-    // Bandit line — solid, coloured
     g.append("path")
       .attr("fill", "none")
       .attr("stroke", fillColor)
       .attr("stroke-width", 2)
       .attr("d", lineGen(banditSeries));
 
-    // Endpoint dots
     const lastBandit = banditSeries[banditSeries.length - 1];
     const lastStatic  = staticSeries[staticSeries.length - 1];
 
@@ -254,29 +201,25 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         .attr("stroke", "#0D0D0D").attr("stroke-width", 1.5);
     }
 
-    // Delta label — top-right corner of the chart, in the top margin (y = -8).
-    // Pinned to a fixed position rather than the endpoint dot to avoid overlapping the trendline.
-    // Suppressed for the first 4 days: Beta(1,1) priors = random allocation,
-    // so early deltas are pure noise before the bandit has learned anything.
-    if (lastBandit && lastStatic && lastStatic.value > 0 && days.length >= 5) {
-      const delta = isCAC
-        ? ((lastStatic.value - lastBandit.value) / lastStatic.value) * 100   // lower CAC = positive
+    // Delay the relative label until five observed days to avoid emphasizing early allocation noise.
+    if (lastBandit && lastStatic && days.length >= 5) {
+      const delta = !(lastStatic.value > 0) ? null : isCAC
+        ? ((lastStatic.value - lastBandit.value) / lastStatic.value) * 100
         : ((lastBandit.value - lastStatic.value) / lastStatic.value) * 100;
 
-      const roundedDelta = Math.round(delta * 10) / 10;
-      const label = roundedDelta > 0 ? `+${roundedDelta.toFixed(1)}%` : `${roundedDelta.toFixed(1)}%`;
-      const labelColor = roundedDelta === 0
+      const percent = formatPercent(delta);
+      const labelColor = percent.tone === "neutral"
         ? "var(--color-text-2)"
-        : roundedDelta > 0 ? "var(--color-positive)" : "var(--color-negative)";
+        : `var(--color-${percent.tone})`;
 
       g.append("text")
         .attr("x", innerW)
-        .attr("y", -8)               // stays in the top margin, clear of the chart area
+        .attr("y", -8)
         .attr("text-anchor", "end")
         .attr("font-size", "12px")
         .attr("font-family", "LetteraMonoLL, monospace")
         .style("fill", labelColor)
-        .text(label);
+        .text(percent.text);
     }
 
     if (isCAC) {
@@ -289,7 +232,6 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         .text("Lower is better");
     }
 
-    // Axes
     g.append("g")
       .attr("transform", `translate(0,${innerH})`)
       .call(d3.axisBottom(xScale)
@@ -300,10 +242,6 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
       .call((g) => g.selectAll("text").style("fill", "var(--color-text-2)").attr("font-size", "11px").attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
-    // Y-axis tick format per metric type:
-    //   CAC  → "$25"    (dollars, inverted axis)
-    //   ROAS → "2.5×"   (ratio)
-    //   CTR  → "3.2%"   (budget-weighted avg CTR)
     const yTickFmt = isCAC
       ? (d) => `$${d.toFixed(0)}`
       : isROAS
@@ -322,11 +260,9 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
     const banditByDay = new Map(banditSeries.map((d) => [d.day, d.value]));
     const staticByDay = new Map(staticSeries.map((d) => [d.day, d.value]));
 
-    // Shooting-star hover dots — glow on bandit, plain on static. Hidden until mousemove.
     const hoverDotBandit = g.append("circle")
       .attr("r", 5).attr("fill", fillColor)
       .attr("stroke", "#0D0D0D").attr("stroke-width", 1.5)
-      .attr("filter", `url(#${glowId})`)
       .attr("opacity", 0).attr("pointer-events", "none");
 
     const hoverDotStatic = g.append("circle")
@@ -344,7 +280,6 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         const sv = staticByDay.get(day);
         if (bv == null) return;
 
-        // Position dots on their respective lines.
         hoverDotBandit.attr("cx", xScale(day)).attr("cy", yScale(bv)).attr("opacity", 1);
         hoverDotStatic.attr("cx", xScale(day)).attr("cy", yScale(sv ?? bv)).attr("opacity", sv != null ? 0.85 : 0);
 
@@ -358,7 +293,7 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         showTooltip(event,
           `<div style="color:var(--color-text-2);margin-bottom:4px">DAY ${day} · ${metricLabel}</div>` +
           `<span style="color:var(--color-positive)">Bandit</span>: ${fmt(bv)}<br/>` +
-          `<span style="color:var(--color-text-2)">Static</span>: ${fmt(sv ?? 0)}`
+          `<span style="color:var(--color-text-2)">Static</span>: ${sv == null ? "No data" : fmt(sv)}`
         );
       })
       .on("mouseleave", () => {

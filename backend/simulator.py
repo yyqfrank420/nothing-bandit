@@ -1,30 +1,8 @@
-"""
-File: simulator.py
-Language: Python
-Purpose: Day-by-day simulation runner for both the bandit and static allocators.
-Connects to: bandit.py    (sample_allocations — reads bandit state)
-             channels.py  (CHANNELS, STATIC_WEIGHTS, DAILY_BUDGET, NOISE_SIGMA)
-             database.py  (insert_daily_results_batch, batch_set_bandit_states,
-                           get_shocks, decrement_shock_durations, get_current_day)
-Inputs:  n_days (int), objective string
-Outputs: Inserts rows + updates bandit state; returns new row dicts
+"""Batch simulation for bandit and static budget allocators.
 
-Latency optimisations:
-  - active shocks read ONCE per call (not per day)
-  - bandit states for all 3 objectives loaded in ONE query (get_bandit_states_all)
-  - all result rows batch-inserted in ONE connection
-  - bandit states written ONCE as absolute values (batch_set_bandit_states)
-  - shock aging done in ONE query (decrement_shock_durations_by(n))
-  - net: simulate(n) opens 6 DB connections flat, regardless of n
-
-Bayesian forgetting:
-  - Alpha/beta are multiplied by DECAY_FACTOR each day before the next sample.
-  - This gives accumulated evidence a ~14-day half-life, so shock-era failures
-    fade after the shock window ends and the bandit recovers toward optimal
-    channels. Without decay, Beta posteriors accumulate β forever — post-shock
-    under-allocation persists indefinitely (the "diseconomies of scale" problem).
-  - Because decay modifies the base state per day, we cannot reconstruct final
-    values from incremental deltas. We write absolute α/β at the end instead.
+Each batch reads shocks and bandit states before the day loop.
+Rewards and decay update in-memory states; final rows and states are saved afterward.
+Decay discounts older evidence. Absolute state writes preserve those decay updates.
 """
 
 import numpy as np
@@ -40,10 +18,7 @@ from database import (
     insert_daily_results_batch,
 )
 
-# Bayesian forgetting: multiply accumulated α and β by this factor each day.
-# γ=0.95 → half-life ≈ 14 days. Post-shock, bad β counts fade in ~2-3 weeks
-# and the bandit re-allocates toward good channels.
-# Long-run equilibrium: α_∞ = win_rate / (1 - γ), β_∞ → DECAY_FLOOR.
+# Discount accumulated evidence each day. At 0.95, its half-life is about 14 days.
 DEFAULT_DECAY_FACTOR = 0.95
 
 # Floor prevents α or β from decaying to zero (Beta(0, x) is undefined).
@@ -79,7 +54,7 @@ def _build_shock_multipliers(active_shocks: list, day_offset: int = 0) -> dict:
 def _draw_rates(channel: dict, shock_multipliers: dict, noise_sigma: float) -> tuple:
     """
     Draw one set of noisy rate observations (CTR, ROAS, CAC) for a channel.
-    Budget-independent — rates represent market conditions for this day only.
+    Budget-independent; rates represent market conditions for this day only.
 
     Called ONCE per channel per day. Both allocators share the same draw so
     the bandit vs static comparison reflects only allocation strategy, not
@@ -132,16 +107,10 @@ def _reward(objective: str, observed_ctr: float, observed_roas: float, observed_
             reward_thresholds: dict) -> float:
     """
     Binarise observed metric against threshold.
-    Returns 1.0 (success) or 0.0 (failure) — mirrors bandit.update_from_results logic
+    Returns 1.0 (success) or 0.0 (failure); mirrors bandit.update_from_results logic
     without the DB call so we can batch the update separately.
     Uses caller-supplied thresholds so settings overrides apply per-session.
 
-    Design note: continuous reward extensions (e.g. Bernoulli sampling trick, Agrawal & Goyal
-    2012) were evaluated and rejected. With decay_factor=0.95, the equilibrium posterior
-    concentration is fixed at ~20 total (α+β). Binary rewards separate channels at
-    Beta(~19,~1) vs Beta(~0.2,~19.8); soft ratio rewards bunch them at Beta(~12,~8) vs
-    Beta(~8,~12). The resulting posterior overlap caused ~17pp allocation quality regression
-    (bandit ROAS lift: +18% binary → +1% continuous over 183 days). Binary is correct here.
     """
     if objective == "ctr":
         return 1.0 if observed_ctr  >= reward_thresholds["ctr"]  else 0.0
@@ -168,22 +137,21 @@ def simulate_day(
 
     force_static: when True the bandit uses static weights instead of Thompson
     Sampling.  Used only on absolute day 1 so both allocators begin from an
-    identical baseline — the chart then shows a clean zero-gap start that
-    diverges as the bandit accumulates learning.  Rewards are still recorded
+    identical allocation baseline. Rewards are still recorded
     so day 1 feeds into the day-2 prior.
 
     Returns:
         (rows, bandit_updates)
         rows:           list of row dicts ready for insert_daily_results_batch
         bandit_updates: list of (channel_id, objective, alpha_delta, beta_delta)
-                        — applied in-memory by run_full_simulation; not written to DB directly
+                       ; applied in-memory by run_full_simulation; not written to DB directly
     """
     channel_ids = [ch["id"] for ch in channels]
 
     rows: list = []
     bandit_updates: list = []
 
-    # Draw market conditions once per channel — both allocators see the same
+    # Draw market conditions once per channel; both allocators see the same
     # CTR / ROAS / CAC for each channel this day. Only budget allocation differs.
     channel_rates = {
         ch["id"]: _draw_rates(ch, shock_multipliers, noise_sigma)
@@ -213,7 +181,7 @@ def simulate_day(
         bandit_updates.append((ch_id, objective, r, 1.0 - r))
 
     # ------------------------------------------------------------------
-    # 2. Static allocator — fixed weights, no feedback
+    # 2. Static allocator; fixed weights, no feedback
     # ------------------------------------------------------------------
     for ch_id, weight in STATIC_WEIGHTS.items():
         budget = weight * total_budget
@@ -248,14 +216,14 @@ def run_full_simulation(
     Bayesian forgetting (decay_factor):
       - After each day's reward update, α and β are multiplied by decay_factor.
       - Default 0.95 → ~14-day half-life. Shock-era β fades post-shock,
-        allowing the bandit to re-converge to the best channel.
+        reducing the weight of earlier observations.
       - Final state is written as absolute values because decay changes the
-        base — incremental deltas would produce incorrect results.
+        base; incremental deltas would produce incorrect results.
 
     Returns a dict with:
-      rows          — list of new row dicts (same as previous return value)
-      current_day   — final simulated day number (computed in-memory, no extra DB call)
-      bandit_states — list of {channel_id, objective, alpha, beta} dicts for the frontend
+      rows         ; list of new row dicts (same as previous return value)
+      current_day  ; final simulated day number (computed in-memory, no extra DB call)
+      bandit_states; list of {channel_id, objective, alpha, beta} dicts for the frontend
     """
     budget     = daily_budget     if daily_budget     is not None else DAILY_BUDGET
     sigma      = noise_sigma      if noise_sigma      is not None else NOISE_SIGMA
@@ -264,7 +232,7 @@ def run_full_simulation(
 
     start_day = get_current_day() + 1
 
-    # Read shocks once — avoids one DB round-trip per day.
+    # Read shocks once; avoids one DB round-trip per day.
     # Per-day multipliers are rebuilt from this list using day_offset so shocks
     # expire correctly mid-run (e.g. a 5-day shock on a 30-day batch run only
     # applies to the first 5 days, not all 30).
@@ -298,7 +266,7 @@ def run_full_simulation(
                 live_states[obj][ch_id]["beta"]  += beta_d
 
             # Bayesian forgetting: discount accumulated evidence so shock-era
-            # β counts fade after the shock ends, enabling post-shock recovery.
+            # beta counts lose weight over subsequent days.
             # Applied after reward so today's signal has full weight; only
             # older evidence fades. Floor prevents Beta(~0, x) which is undefined.
             for ch_id in live_states[objective]:
@@ -314,10 +282,10 @@ def run_full_simulation(
 
     # Write final absolute α/β for all channels + objectives.
     # Must use SET (not incremental ADD) because decay modifies the base state
-    # each day — summing raw deltas onto the initial DB values would ignore decay.
+    # each day; summing raw deltas onto the initial DB values would ignore decay.
     batch_set_bandit_states(live_states)
 
-    # Age shocks — one DB write for the whole batch instead of n_days writes.
+    # Age shocks; one DB write for the whole batch instead of n_days writes.
     decrement_shock_durations_by(n_days)
 
     # Flatten live_states to a list so the simulate endpoint can return it

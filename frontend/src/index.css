@@ -1,16 +1,4 @@
-/* ============================================================
-   File: index.css
-   Language: CSS
-   Purpose: Global styles and Nothing brand theme for the bandit dashboard.
-            Defines fonts, colour variables, resets, and shared utility classes.
-   Connects to: main.jsx (imported once at app root)
-   ============================================================ */
-
-/* ------------------------------------------------------------
-   Nothing brand fonts — community-preserved files served with this application
-   Ndot-55      : dot-matrix display face → KPI numbers, day counter, chart titles
-   LetteraMonoLL: body monospace → labels, descriptions, tooltips
-   ============================================================ */
+/* Nothing fonts and shared dashboard theme. */
 
 @font-face {
   font-family: "Ndot55";
@@ -48,9 +36,7 @@
   font-display: swap;
 }
 
-/* ------------------------------------------------------------
-   Nothing colour palette
-   ============================================================ */
+/* Nothing colour palette */
 :root {
   --font-display: "Ndot55", monospace;
   --font-heading: "Ndot55", monospace;
@@ -82,13 +68,13 @@
   --color-info-dim:     rgba(34, 211, 238, 0.08);  /* info badge bg */
   --color-warning:      #F97316;   /* caution */
 
-  /* Channel colours — carefully chosen for legibility on dark bg */
+  /* Channel colours */
   --ch-1: #F97316;   /* Tech KOL */
-  --ch-2: #A78BFA;   /* Design KOL     — violet */
+  --ch-2: #A78BFA;   /* Design KOL     - violet */
   --ch-3: #4ECDC4;   /* Generic KOL */
-  --ch-4: #E879A0;   /* Instagram Ads  — pink */
-  --ch-5: #22D3EE;   /* TikTok Ads     — cyan */
-  --ch-6: #4ADE80;   /* Google Search  — green */
+  --ch-4: #E879A0;   /* Instagram Ads  - pink */
+  --ch-5: #22D3EE;   /* TikTok Ads     - cyan */
+  --ch-6: #4ADE80;   /* Google Search  - green */
 
   /* Static allocator line colour */
   --color-static:    #505050;
@@ -105,9 +91,7 @@
   --duration: 300ms;
 }
 
-/* ------------------------------------------------------------
-   Global reset
-   ============================================================ */
+/* Global reset */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -129,9 +113,7 @@ body {
   min-height: 100vh;
 }
 
-/* ------------------------------------------------------------
-   Typography helpers
-   ============================================================ */
+/* Typography helpers */
 .font-display {
   font-family: var(--font-display);
   letter-spacing: 0.04em;
@@ -146,81 +128,22 @@ body {
   font-family: "LetteraMonoLL", "Space Mono", monospace;
 }
 
-/* ------------------------------------------------------------
-   Scrollbar
-   ============================================================ */
+/* Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--color-bg); }
 ::-webkit-scrollbar-thumb { background: var(--color-border-2); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
 
-/* ------------------------------------------------------------
-   SVG chart defaults — prevents invisible text on dark bg
-   ============================================================ */
+/* SVG chart defaults - prevents invisible text on dark bg */
 svg text {
   font-family: "LetteraMonoLL", "Space Mono", monospace;
   fill: var(--color-text-2);
 }
 
-/* ------------------------------------------------------------
-   Selection
-   ============================================================ */
+/* Selection */
 ::selection {
   background: var(--color-accent-dim);
   color: var(--color-text);
-}
-
-/* ------------------------------------------------------------
-   Scanline overlay — subtle CRT texture on the background.
-   Applied to the body via a pseudo-element.
-   The repeating-linear-gradient creates horizontal lines at 4px intervals.
-   Pointer-events: none so it doesn't block clicks.
-   ============================================================ */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 3px,
-    rgba(0, 0, 0, 0.06) 3px,
-    rgba(0, 0, 0, 0.06) 4px
-  );
-  pointer-events: none;
-}
-
-/* ------------------------------------------------------------
-   Shared chart card hover glow
-   ============================================================ */
-.chart-card {
-  transition: border-color 300ms var(--ease-out), box-shadow 300ms var(--ease-out);
-}
-.chart-card:hover {
-  border-color: #333;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.03);
-}
-
-/* ------------------------------------------------------------
-   KPI value counter — number updates slide in from bottom
-   ============================================================ */
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.kpi-value-updated {
-  animation: slideUp 250ms var(--ease-out);
-}
-
-/* Shared shock impact entrance retains feedback without spatial movement. */
-@keyframes fadeIn { from { opacity: 0.6; } to { opacity: 1; } }
-
-/* ------------------------------------------------------------
-   Chart tooltip fade
-   ============================================================ */
-.chart-tooltip {
-  transition: opacity 120ms ease;
 }
 
 /* Shared dashboard controls and typography. */
@@ -243,7 +166,6 @@ button:disabled, input:disabled { cursor: not-allowed; }
 .dashboard-button--shock { background: var(--color-accent-dim); border-color: #663333; color: var(--color-negative); }
 .dashboard-button--active { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-bg); }
 .dashboard-button:disabled { opacity: .45; }
-.dashboard-icon-button { min-width: 44px; min-height: 44px; }
 .dashboard-button:not(:disabled):not(:focus-visible) { transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 120ms var(--ease-out); }
 .dashboard-button:not(:disabled):not(:focus-visible):active { transform: scale(.98); }
 .loading-spinner { width: 12px; height: 12px; flex: 0 0 12px; border: 1.5px solid #555; border-top-color: currentColor; border-radius: 50%; animation: spin 500ms linear infinite; }
@@ -337,7 +259,7 @@ button:disabled, input:disabled { cursor: not-allowed; }
   .shortcut-tooltip { left: 0; right: auto; width: 230px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .decorative-motion, .kpi-value-updated, .loading-spinner { animation: none !important; }
+  .decorative-motion, .loading-spinner { animation: none !important; }
   .dashboard-button:not(:disabled):not(:focus-visible):active { transform: none; }
   .shock-banner { transition: none !important; }
   html { scroll-behavior: auto; }

@@ -1,25 +1,8 @@
-"""
-File: bandit.py
-Language: Python
-Purpose: Thompson Sampling implementation for the multi-armed bandit.
-         Handles budget allocation (sampling step) and state update (reward step).
-Connects to: database.py (reads/writes bandit_state table),
-             channels.py (reads REWARD_THRESHOLDS),
-             main.py (calls sample_allocations and update_from_results each day)
-Inputs:  objective string, channel IDs, observed metrics per channel per day
-Outputs: {channel_id: budget_allocated} dict from sample_allocations
+"""Thompson Sampling allocation and binary reward updates.
 
-Algorithm overview (plain English):
-  Thompson Sampling treats each channel as having an unknown "success probability"
-  drawn from a Beta distribution. Every day:
-    1. Sample one θ_i ~ Beta(α_i, β_i) per channel — this is our best guess at
-       how good that channel is, with built-in uncertainty.
-    2. Allocate budget proportional to θ_i values — channels we're more confident
-       about get more budget.
-    3. Observe the outcome and update:
-         α += 1  if the channel beat the reward threshold  (success)
-         β += 1  if the channel missed the threshold       (failure)
-  Over time the distribution narrows around the true best channel.
+Each channel has a Beta posterior over its binary reward probability.
+Allocation is proportional to one posterior sample per channel.
+Threshold success increments alpha; failure increments beta.
 """
 
 import numpy as np
@@ -38,7 +21,7 @@ def sample_allocations(
     Thompson Sampling allocation step.
 
     For each channel, draw θ_i ~ Beta(α_i, β_i). Allocate budget proportional
-    to these samples so higher-confidence channels receive more spend.
+    to these samples.
 
     Args:
         objective:    'ctr' | 'roas' | 'cac'
@@ -57,7 +40,7 @@ def sample_allocations(
         states = get_bandit_states(objective)
 
     # Draw one sample per channel from its Beta posterior.
-    # np.random.beta(a, b) samples from Beta(a, b) — values in [0, 1].
+    # np.random.beta(a, b) samples from Beta(a, b); values in [0, 1].
     thetas = {
         cid: float(np.random.beta(states[cid]["alpha"], states[cid]["beta"]))
         for cid in channel_ids
@@ -65,7 +48,7 @@ def sample_allocations(
 
     total_theta = sum(thetas.values())
 
-    # Guard against degenerate case (extremely unlikely with Beta, but be safe).
+    # Avoid dividing by a near-zero sum of samples.
     if total_theta < 1e-9:
         equal_share = total_budget / len(channel_ids)
         return {cid: equal_share for cid in channel_ids}
@@ -91,7 +74,7 @@ def update_from_results(
     Binary reward binarises a continuous metric against a fixed threshold:
       CTR  reward = 1 if observed_ctr  >= threshold
       ROAS reward = 1 if observed_roas >= threshold
-      CAC  reward = 1 if observed_cac  <= threshold  (inverted — lower is better)
+      CAC  reward = 1 if observed_cac  <= threshold  (inverted; lower is better)
 
     Args:
         channel_id:    integer channel ID
@@ -105,7 +88,7 @@ def update_from_results(
     elif objective == "roas":
         reward = 1 if observed_roas >= thresholds["roas"] else 0
     elif objective == "cac":
-        # CAC is minimised — reward if below threshold, not above.
+        # CAC is minimised; reward if below threshold, not above.
         reward = 1 if observed_cac <= thresholds["cac"] else 0
     else:
         raise ValueError(f"Unknown objective '{objective}'. Expected: ctr | roas | cac")

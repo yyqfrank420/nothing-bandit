@@ -1,21 +1,3 @@
-/**
- * File: BanditConfidenceChart.jsx
- * Language: JavaScript (React 18 + D3 v7)
- * Purpose: Shows Beta(α, β) posterior distribution curves for all 6 channels
- *          for a single objective. Narrow peaked = confident winner.
- *          Wide flat = still exploring. Curves update as the bandit accumulates data.
- * Connects to: App.jsx
- * Inputs:
- *   banditStates — all bandit_state rows from /bandit-states
- *   objective    — 'ctr' | 'roas' | 'cac'
- * Outputs: Grid of small SVG sparklines, one per channel
- *
- * Math note:
- *   Beta PDF = x^(α-1) × (1-x)^(β-1) / B(α,β)
- *   We evaluate this at 100 points in [0,1] using d3.range.
- *   We use log-space computation to avoid overflow for large α,β values.
- */
-
 import * as d3 from "d3";
 import React, { useEffect } from "react";
 import { useContainerWidth } from "../hooks.js";
@@ -24,17 +6,9 @@ import { CHANNEL_COLORS, CHANNEL_NAMES } from "../App.jsx";
 const CHANNEL_IDS = [1, 2, 3, 4, 5, 6];
 const N_POINTS = 120;
 
-/**
- * Compute Beta PDF values at N_POINTS equally-spaced x in (0, 1).
- * Uses log-space to handle large alpha/beta without overflow.
- * Returns array of {x, y} objects.
- */
 function betaPDF(alpha, beta) {
   const xs = d3.range(1 / N_POINTS, 1, 1 / N_POINTS);
-  // logBeta(a,b) = lgamma(a) + lgamma(b) - lgamma(a+b)
-  // We use a simple Stirling approximation for lgamma for large values,
-  // or rely on the fact that we only need relative (unnormalised) density for display.
-  // For our purposes, unnormalised PDF is fine since we normalise to fill the sparkline.
+  // Evaluate in log space to avoid intermediate overflow for large parameters.
   const logNorm = logBeta(alpha, beta);
   return xs.map((x) => {
     const logPDF = (alpha - 1) * Math.log(x) + (beta - 1) * Math.log(1 - x) - logNorm;
@@ -43,7 +17,7 @@ function betaPDF(alpha, beta) {
 }
 
 function logGamma(z) {
-  // Lanczos approximation — accurate to ~15 decimal places for z > 0.
+  // Lanczos approximation for positive parameters.
   if (z < 0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
   z -= 1;
   const g = 7;
@@ -79,11 +53,9 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
   const gap = 12;
 
   useEffect(() => {
-    // Always clear container first — prevents stale curves persisting after reset.
     if (containerRef.current) d3.select(containerRef.current).selectAll("svg").remove();
     if (!banditStates || banditStates.length === 0 || !containerRef.current || totalW === 0) return;
 
-    // Build lookup: {channel_id: {alpha, beta}}
     const stateMap = {};
     banditStates
       .filter((s) => s.objective === objective)
@@ -107,11 +79,9 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
         ? "Uniform"
         : `${modes.length === 1 ? "Mode" : "Modes"} ${modes.map((mode) => `${Math.round(mode * 100)}%`).join(", ")}`;
 
-      // Compute PDF
       const data = betaPDF(alpha, beta);
       const maxY = d3.max(data, (d) => d.y);
 
-      // Position using CSS grid equivalent via absolute positioning
       const svg = d3.select(container)
         .append("svg")
         .attr("width", cellW)
@@ -146,7 +116,6 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
 
       const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-      // Gradient fill
       const gradId = `conf-grad-${objective}-${chId}`;
       const defs = svg.append("defs");
       const grad = defs.append("linearGradient")
@@ -156,18 +125,15 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
       grad.append("stop").attr("offset", "0%").attr("stop-color", color).attr("stop-opacity", 0.3);
       grad.append("stop").attr("offset", "100%").attr("stop-color", color).attr("stop-opacity", 0.02);
 
-      // Baseline
       g.append("line")
         .attr("x1", 0).attr("y1", iH).attr("x2", iW).attr("y2", iH)
         .attr("stroke", "#282828").attr("stroke-width", 1);
 
-      // Fill area
       g.append("path")
         .datum(data)
         .attr("fill", `url(#${gradId})`)
         .attr("d", areaGen);
 
-      // Distribution curve — no transition so auto-mode stays smooth.
       g.append("path")
         .datum(data)
         .attr("fill", "none")

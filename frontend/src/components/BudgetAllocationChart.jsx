@@ -1,22 +1,3 @@
-/**
- * File: BudgetAllocationChart.jsx
- * Language: JavaScript (React 18 + D3 v7)
- * Purpose: Stacked area chart showing bandit budget reallocation over time.
- *          As the bandit converges, the dominant channel expands to fill the canvas.
- * Connects to: App.jsx
- * Inputs:
- *   results     — all daily_results rows (filtered to this objective + bandit)
- *   objective   — 'ctr' | 'roas' | 'cac'
- *   shockEvents — array of shock objects with affected start_day/end_day dates
- *   currentDay  — highest simulated day (for x-axis domain)
- * Outputs: SVG element managed entirely by D3
- *
- * Design notes:
- *   - No D3 transitions on re-renders — smoothness comes from 1-day/150ms update frequency
- *   - Low fill opacity (0.40) prevents 6 saturated colours from clashing on dark bg
- *   - Thin 1px stroke on each band top edge gives definition without visual noise
- */
-
 import * as d3 from "d3";
 import React, { useEffect } from "react";
 import { useContainerWidth } from "../hooks.js";
@@ -29,7 +10,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
   const svgRef = React.useRef(null);
 
   useEffect(() => {
-    // Always clear first — prevents stale chart persisting when data is reset to empty.
     if (svgRef.current) d3.select(svgRef.current).selectAll("*").remove();
     if (!results || results.length === 0 || !svgRef.current || W === 0) return;
 
@@ -38,13 +18,11 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
     const innerW = W - margin.left - margin.right;
     const innerH = H - margin.top - margin.bottom;
 
-    // Filter to bandit allocator for this objective only.
     const filtered = results.filter(
       (r) => r.objective === objective && r.allocator === "bandit"
     );
     if (filtered.length === 0) return;
 
-    // Pivot: group by day → {day, [chId]: budget}
     const byDay = d3.rollup(
       filtered,
       (rows) => {
@@ -65,7 +43,7 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
     const stack = d3.stack().keys(CHANNEL_IDS).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
     const series = stack(stackData);
 
-    // Derive total daily budget from data — use the maximum observed across all
+    // Derive total daily budget from data: use the maximum observed across all
     // days so the axis stays correct even if the user changed the budget slider
     // mid-simulation (later days would overflow a day-1-based scale).
     const totalBudget = Math.max(
@@ -81,7 +59,7 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
       .domain([0, totalBudget])
       .range([innerH, 0]);
 
-    // Smooth interpolation along x but flat along y — gives a cleaner "stream" feel
+    // Smooth interpolation along x but flat along y gives a cleaner "stream" feel
     // than curveCatmullRom which can create bulges.
     const area = d3.area()
       .x((d) => xScale(d.data.day))
@@ -94,16 +72,12 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
       .y((d) => yScale(d[1]))
       .curve(d3.curveMonotoneX);
 
-    // -----------------------------------------------------------------------
-    // Render — full clear + redraw, no transitions (avoids mid-animation jitter)
-    // -----------------------------------------------------------------------
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
     svg.attr("width", W).attr("height", H).attr("viewBox", `0 0 ${W} ${H}`);
 
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Subtle horizontal grid lines only
     g.append("g")
       .call(
         d3.axisLeft(yScale)
@@ -116,7 +90,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         .attr("stroke", "#1C1C1C")
         .attr("stroke-dasharray", "1,6"));
 
-    // Stacked fill areas — muted opacity so 6 colours don't overwhelm
     series.forEach((s) => {
       g.append("path")
         .datum(s)
@@ -125,7 +98,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         .attr("d", area);
     });
 
-    // Thin band-boundary stroke on top of each layer — defines the stacks clearly
     series.forEach((s) => {
       g.append("path")
         .datum(s)
@@ -136,7 +108,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         .attr("d", line);
     });
 
-    // Tooltip — set up before shock events so shock hit-areas can reference it
     const tooltip = d3.select("body").selectAll(".ba-tooltip").data([null]).join("div")
       .attr("class", "ba-tooltip")
       .style("position", "fixed")
@@ -167,7 +138,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
       tooltip.style("left", `${left}px`).style("top", `${top}px`);
     }
 
-    // Shock event vertical lines + transparent hit-areas for hover tooltips
     shockEvents.forEach((shock) => {
       const shockDay = shock.start_day;
       if (shockDay > 0 && shockDay <= (currentDay || 183)) {
@@ -176,13 +146,11 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         g.append("line")
           .attr("x1", sx).attr("x2", sx)
           .attr("y1", 0).attr("y2", innerH)
-          // style() — not attr() — so CSS variable resolves correctly
           .style("stroke", "var(--color-accent)")
           .attr("stroke-width", 1)
           .attr("stroke-dasharray", "3,4")
           .attr("opacity", 0.45);
 
-        // ±8px wide hit-area — full chart height — triggers tooltip on hover
         g.append("rect")
           .attr("class", "shock-hit-area")
           .attr("x", sx - 8).attr("y", 0)
@@ -199,7 +167,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
       }
     });
 
-    // X axis
     g.append("g")
       .attr("transform", `translate(0,${innerH})`)
       .call(
@@ -219,7 +186,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
     const dolFmt  = d => d >= 1000 ? `$${(d / 1000).toFixed(0)}k` : `$${d}`;
     const axisTicks = [0, 0.5, 1.0].map(p => p * totalBudget);
 
-    // Left Y axis — percentage of daily budget (budget-relative, not hardcoded)
     g.append("g")
       .call(
         d3.axisLeft(yScale)
@@ -234,7 +200,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         .attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
-    // Right Y axis — actual $ amounts (smart $k formatting above $1,000)
     g.append("g")
       .attr("transform", `translate(${innerW},0)`)
       .call(
@@ -250,7 +215,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         .attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
-    // Hit-area rect for the channel breakdown tooltip (separate from shock tooltips above)
     g.append("rect")
       .attr("width", innerW).attr("height", innerH)
       .attr("fill", "none")

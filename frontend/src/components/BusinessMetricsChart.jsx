@@ -1,36 +1,16 @@
-/**
- * File: BusinessMetricsChart.jsx
- * Language: JavaScript (React 18 + D3 v7)
- * Purpose: Full-width business analytics panel showing 4 KPI charts in a 2×2 grid,
- *          each comparing the bandit vs static allocator on the ROAS objective.
- *          Includes summary KPI cards showing the final-day delta.
- * Connects to: App.jsx
- * Inputs:
- *   results    — all daily_results rows (filtered to objective='roas' internally)
- *   currentDay — for x-axis scaling
- * Outputs: KPI cards + 2×2 SVG chart grid
- *
- * KPIs displayed:
- *   1. Cumulative Revenue   — sum(revenue) per allocator over time
- *   2. Running CAC          — sum(budget) / sum(conversions) per allocator
- *   3. Running ROAS         — sum(revenue) / sum(budget) per allocator
- *   4. Total Conversions    — sum(conversions) per allocator over time
- *
- * All computed client-side from the results array — no extra API call needed.
- */
-
 import * as d3 from "d3";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useAnimatedNumber, useContainerWidth } from "../hooks.js";
+import { useContainerWidth } from "../hooks.js";
+import { formatPercent } from "../metricFormatting.js";
 import "./BusinessMetricsChart.css";
 
 const ALL_OBJECTIVES = ["ctr", "roas", "cac"];
 
 const OBJECTIVE_LABELS = {
-  all:  "All Objectives (avg)",
-  ctr:  "CTR — Click Through Rate",
-  roas: "ROAS — Return on Ad Spend",
-  cac:  "CAC — Customer Acquisition Cost",
+  all:  "All objectives (avg)",
+  ctr:  "CTR: Click-through rate",
+  roas: "ROAS: Return on ad spend",
+  cac:  "CAC: Customer acquisition cost",
 };
 
 // Scale-aware revenue formatter: avoids "$1300k" at large cumulative values.
@@ -40,13 +20,11 @@ const fmtRevenue = (v) => {
   return `$${v.toFixed(0)}`;
 };
 
-// Configuration for each KPI chart panel.
 const KPIS = [
   {
     key:       "revenue",
-    label:     "Cumulative Revenue",
+    label:     "Cumulative revenue",
     format:    fmtRevenue,
-    shortFmt:  fmtRevenue,
     higherBetter: true,
     color:     "var(--color-positive)",
   },
@@ -54,7 +32,6 @@ const KPIS = [
     key:       "cac",
     label:     "Running CAC",
     format:    (v) => `$${v.toFixed(2)}`,
-    shortFmt:  (v) => `$${v.toFixed(2)}`,
     higherBetter: false,
     color:     "var(--color-info)",
   },
@@ -62,26 +39,23 @@ const KPIS = [
     key:       "roas",
     label:     "Running ROAS",
     format:    (v) => `${v.toFixed(2)}×`,
-    shortFmt:  (v) => `${v.toFixed(2)}×`,
     higherBetter: true,
     color:     "var(--ch-2)",
   },
   {
     key:       "conversions",
-    label:     "Total Conversions",
+    label:     "Total conversions",
     format:    (v) => v.toFixed(0),
-    shortFmt:  (v) => v.toFixed(0),
     higherBetter: true,
     color:     "var(--color-warning)",
   },
 ];
 
-// Build series for a given objective filter ("all" = average across all three).
 function useSeries(results, activeObjective) {
   return useMemo(() => {
     if (!results || results.length === 0) return { bandit: [], static: [] };
 
-    // When filtering to one objective, the rows are already scoped — no averaging needed.
+    // When filtering to one objective, the rows are already scoped: no averaging needed.
     // When showing "all", we average across 3 objectives so each objective counts equally
     // regardless of daily budget (budget is consistent across objectives by design).
     const filtered = activeObjective === "all"
@@ -126,7 +100,6 @@ function useSeries(results, activeObjective) {
   }, [results, activeObjective]);
 }
 
-// Shown on day 0 — values at zero, prompts user to simulate.
 function ZeroKpiCard({ kpi }) {
   return (
     <div className="business-kpi-card">
@@ -134,7 +107,7 @@ function ZeroKpiCard({ kpi }) {
         {kpi.label}
       </div>
       <div className="business-kpi-value business-kpi-value-empty">
-        {kpi.shortFmt(0)}
+        {kpi.key === "cac" || kpi.key === "roas" ? "No data" : kpi.format(0)}
       </div>
       <div className="business-kpi-comparison">
         simulate to populate
@@ -153,15 +126,10 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
   const bv = lastBandit[kpi.key];
   const sv = lastStatic[kpi.key];
 
-  // Delta: positive = bandit wins, negative = bandit loses.
   const rawDelta = kpi.higherBetter ? bv - sv : sv - bv;
-  const pctDelta = sv !== 0 ? (rawDelta / Math.abs(sv)) * 100 : 0;
-  const isPositive = pctDelta >= 0;
-  const deltaColor = isPositive ? "var(--color-positive)" : "var(--color-negative)";
-  const deltaStr = `${isPositive ? "+" : ""}${pctDelta.toFixed(1)}%`;
-
-  // Animate the primary value smoothly when it changes.
-  const animatedBv = useAnimatedNumber(bv, 500);
+  const percent = formatPercent(sv > 0 ? (rawDelta / Math.abs(sv)) * 100 : null);
+  const deltaColor = percent.tone === "neutral" ? "var(--color-text-2)" : `var(--color-${percent.tone})`;
+  const deltaStr = percent.text;
 
   const absDiff = Math.abs(bv - sv);
   const betterLabel = kpi.higherBetter ? "higher is better" : "lower is better";
@@ -195,7 +163,7 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
         {kpi.label}
       </div>
       <div className="business-kpi-value" style={{ color: kpi.color }}>
-        {kpi.shortFmt(animatedBv)}
+        {kpi.format(bv)}
       </div>
       <div className="business-kpi-comparison">
         <span style={{ color: deltaColor }}>
@@ -204,7 +172,7 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
         <span>vs static</span>
       </div>
 
-      {/* Hover pane — rendered at fixed viewport position to escape card overflow bounds */}
+      {/* Fixed positioning keeps the tooltip outside chart overflow bounds. */}
       {tooltipPos && (
         <div className="business-kpi-tooltip" aria-hidden="true" style={{
           left: `${tooltipPos.x}px`,
@@ -230,7 +198,6 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
   );
 }
 
-// Single KPI line chart panel.
 function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
   const [containerRef, W] = useContainerWidth();
   const svgRef = useRef(null);
@@ -278,23 +245,13 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
     grad.append("stop").attr("offset", "0%").attr("stop-color", kpi.color).attr("stop-opacity", 0.2);
     grad.append("stop").attr("offset", "100%").attr("stop-color", kpi.color).attr("stop-opacity", 0);
 
-    // Glow filter — applied to hover dot for shooting-star halo.
-    const glowId = `bm-glow-${kpi.key}`;
-    const glowFilter = defs.append("filter").attr("id", glowId).attr("x", "-50%").attr("y", "-50%").attr("width", "200%").attr("height", "200%");
-    glowFilter.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", "3").attr("result", "blur");
-    const glowMerge = glowFilter.append("feMerge");
-    glowMerge.append("feMergeNode").attr("in", "blur");
-    glowMerge.append("feMergeNode").attr("in", "SourceGraphic");
-
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Grid
     g.append("g")
       .call(d3.axisLeft(yScale).ticks(3).tickSize(-iW).tickFormat(""))
       .call((g) => g.select(".domain").remove())
       .call((g) => g.selectAll("line").attr("stroke", "var(--color-surface-2)").attr("stroke-dasharray", "2,4"));
 
-    // Area under bandit
     g.append("path")
       .datum(banditSeries)
       .attr("fill", `url(#${gradId})`)
@@ -304,7 +261,6 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
         .y1((d) => yScale(d[kpi.key]))
         .curve(d3.curveCatmullRom.alpha(0.5)));
 
-    // Static line
     g.append("path")
       .attr("fill", "none")
       .attr("stroke", "var(--color-muted)")
@@ -312,14 +268,12 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
       .attr("stroke-dasharray", "4,4")
       .attr("d", lineGen(staticSeries));
 
-    // Bandit line — no transition so 1-day-step replay stays smooth.
     g.append("path")
       .attr("fill", "none")
       .attr("stroke", kpi.color)
       .attr("stroke-width", 2)
       .attr("d", lineGen(banditSeries));
 
-    // Axes
     g.append("g")
       .attr("transform", `translate(0,${iH})`)
       .call(d3.axisBottom(xScale)
@@ -339,16 +293,9 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
       .call((g) => g.selectAll("text").attr("fill", "var(--color-text-2)").attr("font-size", "11px").attr("font-family", "var(--font-mono)"))
       .call((g) => g.selectAll("line").attr("stroke", "var(--color-border)"));
 
-    // -----------------------------------------------------------------------
-    // Tooltip + crosshair — follows mouse across the chart.
-    // Uses the same pattern as BanditVsStaticChart for consistency.
-    // -----------------------------------------------------------------------
-
-    // Shooting-star hover dots — positioned on their lines during mousemove.
     const hoverDotBandit = g.append("circle")
       .attr("r", 5).attr("fill", kpi.color)
       .attr("stroke", "var(--color-bg)").attr("stroke-width", 1.5)
-      .attr("filter", `url(#${glowId})`)
       .attr("opacity", 0).attr("pointer-events", "none");
 
     const hoverDotStatic = g.append("circle")
@@ -375,11 +322,9 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
       .style("transition", "opacity 80ms")
       .style("white-space", "nowrap");
 
-    // Lookup maps: day → value for fast O(1) access in mousemove.
     const banditByDay = new Map(banditSeries.map((d) => [d.day, d[kpi.key]]));
     const staticByDay = new Map(staticSeries.map((d) => [d.day, d[kpi.key]]));
 
-    // Vertical crosshair line — initially invisible, shown on hover.
     const crosshair = g.append("line")
       .attr("y1", 0).attr("y2", iH)
       .attr("stroke", "var(--color-border-2)")
@@ -388,7 +333,6 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
       .attr("opacity", 0)
       .attr("pointer-events", "none");
 
-    // Invisible hit-area rect to capture mouse events across the whole chart.
     g.append("rect")
       .attr("width", iW).attr("height", iH)
       .attr("fill", "none").attr("pointer-events", "all")
@@ -399,17 +343,15 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
         const sv  = staticByDay.get(day);
         if (bv == null) return;
 
-        // Move crosshair and shooting-star dots to the snapped day.
         const snappedX = xScale(day);
         crosshair.attr("x1", snappedX).attr("x2", snappedX).attr("opacity", 0.7);
         hoverDotBandit.attr("cx", snappedX).attr("cy", yScale(bv)).attr("opacity", 1);
         hoverDotStatic.attr("cx", snappedX).attr("cy", yScale(sv ?? bv)).attr("opacity", sv != null ? 0.85 : 0);
 
-        // Delta % at this day (same direction logic as KpiCard).
         const rawDelta = kpi.higherBetter ? bv - sv : sv - bv;
-        const pctDelta = sv !== 0 ? (rawDelta / Math.abs(sv)) * 100 : 0;
-        const deltaStr = `${pctDelta >= 0 ? "+" : ""}${pctDelta.toFixed(1)}%`;
-        const deltaColor = pctDelta >= 0 ? "var(--color-positive)" : "var(--color-negative)";
+        const percent = formatPercent(sv > 0 ? (rawDelta / Math.abs(sv)) * 100 : null);
+        const deltaStr = percent.text;
+        const deltaColor = percent.tone === "neutral" ? "var(--color-text-2)" : `var(--color-${percent.tone})`;
 
         tooltip
           .style("opacity", 1)
@@ -419,7 +361,7 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
             `<div style="color:var(--color-text-2);font-size:11px;margin-bottom:4px">` +
             `DAY ${day} · ${kpi.label.toUpperCase()}</div>` +
             `<span style="color:var(--color-positive)">Bandit</span>: ${kpi.format(bv)}<br/>` +
-            `<span style="color:var(--color-text-2)">Static</span>: ${kpi.format(sv ?? 0)}` +
+            `<span style="color:var(--color-text-2)">Static</span>: ${sv == null ? "No data" : kpi.format(sv)}` +
             `<div style="margin-top:5px;border-top:1px solid var(--color-border);padding-top:5px">` +
             `<span style="color:${deltaColor}">${deltaStr}</span>` +
             `<span style="color:var(--color-text-2);margin-left:6px">vs static</span></div>`
@@ -461,12 +403,10 @@ function ObjTab({ label, description, active, onClick }) {
 }
 
 export default function BusinessMetricsChart({ results, currentDay }) {
-  // Internal toggle: "all" averages across all 3 objectives; specific obj filters to just that one.
   const [activeObjective, setActiveObjective] = useState("all");
 
   const { bandit: banditSeries, static: staticSeries } = useSeries(results, activeObjective);
 
-  // Day 0 zero-state: show KPI cards at 0 so the dashboard is never blank.
   const isEmpty = banditSeries.length === 0;
 
   return (
@@ -493,7 +433,6 @@ export default function BusinessMetricsChart({ results, currentDay }) {
         </p>
       )}
 
-      {/* Summary KPI cards — show zeroes on day 0 for realism */}
       <div className="business-kpi-grid">
         {KPIS.map((kpi) => (
           isEmpty
@@ -502,7 +441,6 @@ export default function BusinessMetricsChart({ results, currentDay }) {
         ))}
       </div>
 
-      {/* 2×2 chart grid — hidden on day 0 (nothing to plot) */}
       {!isEmpty && (
         <div className="business-chart-grid">
           {KPIS.map((kpi) => (

@@ -1,21 +1,3 @@
-/**
- * File: GuidedTour.jsx
- * Language: JavaScript (React 18)
- * Purpose: Full user guide flow triggered by "Get Started" on the landing page.
- *          Phase 1 — UserGuide: a 5-slide educational wizard explaining the
- *            problem, algorithm, prototype, what's real vs simulated, and
- *            how to read the dashboard. Written for business stakeholders.
- *          Phase 2 — Spotlight tour: 3 sequential steps highlighting key
- *            dashboard areas (controls, allocation grid, business outcomes).
- *
- * Connects to: App.jsx — receives show (bool) and onDone (callback)
- *              DOM elements with data-tour attributes in App.jsx
- * Inputs:
- *   show   — true = render user guide, false = render nothing
- *   onDone — called when user finishes or skips both phases
- * Outputs: React portal overlay rendered into document.body
- */
-
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./SettingsPanel.css";
@@ -50,13 +32,8 @@ function useTourDialog(onClose) {
   return ref;
 }
 
-// ---------------------------------------------------------------------------
-// User Guide slide definitions
-// ---------------------------------------------------------------------------
-
 const GUIDE_SLIDES = [
   {
-    tag: "THE SIMULATION",
     title: "Compare two budget strategies",
     body: [
       {
@@ -75,7 +52,6 @@ const GUIDE_SLIDES = [
     accent: null,
   },
   {
-    tag: "THE METHOD",
     title: "Thompson Sampling",
     body: [
       {
@@ -94,7 +70,6 @@ const GUIDE_SLIDES = [
     accent: null,
   },
   {
-    tag: "THE OBJECTIVES",
     title: "Choose a measure",
     body: [
       {
@@ -113,7 +88,6 @@ const GUIDE_SLIDES = [
     accent: null,
   },
   {
-    tag: "THE DEMO",
     title: "What is real or simulated",
     twoCol: true,
     real: [
@@ -126,12 +100,11 @@ const GUIDE_SLIDES = [
       "Channel performance rates and daily variation",
       "Revenue, clicks, and conversions",
       "Preset market shock scenarios",
-      "All campaign outcomes; no live ad data",
+      "All campaign outcomes",
     ],
     note: "This demo does not place ads or use live campaign data.",
   },
   {
-    tag: "THE DASHBOARD",
     title: "Read the results",
     body: [
       {
@@ -186,10 +159,6 @@ const STEPS = [
 
 const PADDING = 14;
 
-// ---------------------------------------------------------------------------
-// Shared button styles
-// ---------------------------------------------------------------------------
-
 const btnSecondary = {
   background:    "none",
   fontSize:      "12px",
@@ -213,10 +182,6 @@ const btnPrimary = {
   fontFamily:    "var(--font-mono)",
 };
 
-// ---------------------------------------------------------------------------
-// UserGuide — 5-slide educational wizard
-// ---------------------------------------------------------------------------
-
 function UserGuide({ onDone, onSkip }) {
   const dialogRef = useTourDialog(onSkip);
   const [slide, setSlide] = useState(0);
@@ -233,13 +198,10 @@ function UserGuide({ onDone, onSkip }) {
 
   return createPortal(
     <>
-      {/* Dimmed overlay — clicking outside skips */}
       <div
         style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 9000 }}
         onClick={onSkip}
       />
-
-      {/* Positioning shell — no animation on this div, only on the card inside */}
       <div
         style={{
           position:  "fixed",
@@ -250,7 +212,6 @@ function UserGuide({ onDone, onSkip }) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Guide content scrolls independently of the dashboard. */}
         <div
           ref={dialogRef}
           className="tour-dialog"
@@ -271,8 +232,6 @@ function UserGuide({ onDone, onSkip }) {
             boxShadow:    "0 12px 60px rgba(0,0,0,0.7)",
           }}
         >
-
-          {/* Header bar */}
           <div style={{
             display:      "flex",
             alignItems:   "center",
@@ -282,35 +241,17 @@ function UserGuide({ onDone, onSkip }) {
             flexWrap: "wrap",
             borderBottom: "1px solid #1E1E1E",
           }}>
-            {/* Brand */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--color-accent)", flexShrink: 0 }} />
               <span style={{ fontFamily: "var(--font-display)", fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.12em" }}>
                 NOTHING BANDIT™
               </span>
             </div>
-            {/* Tag */}
             <span style={{ fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.12em", textTransform: "uppercase" }}>
               USER GUIDE
             </span>
           </div>
-
-          {/* Slide content */}
           <div style={{ padding: "24px" }}>
-
-            {/* Slide tag */}
-            <div style={{
-              fontSize:      "12px",
-              fontFamily: "var(--font-mono)",
-              color:         "var(--color-accent)",
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-              marginBottom:  "10px",
-            }}>
-              {current.tag}
-            </div>
-
-            {/* Slide title */}
             <h2 id="guide-title" tabIndex={-1} aria-live="polite" style={{
               marginTop: 0,
               fontWeight: "normal",
@@ -324,14 +265,11 @@ function UserGuide({ onDone, onSkip }) {
             }}>
               {current.title}
             </h2>
-
-            {/* Two-column layout for Real vs Simulated slide */}
             {current.twoCol ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(190px, 100%), 1fr))", gap: "20px", marginBottom: "20px" }}>
-                {/* Real column */}
                 <div>
                   <div style={{ fontSize: "11px", color: "var(--color-positive)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px", display: "flex", alignItems: "center", gap: "5px" }}>
-                    <span style={{ fontSize: "11px" }}>✓</span> Real
+                    Real
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
                     {current.real.map((item, i) => (
@@ -342,11 +280,9 @@ function UserGuide({ onDone, onSkip }) {
                     ))}
                   </ul>
                 </div>
-
-                {/* Simulated column */}
                 <div>
                   <div style={{ fontSize: "11px", color: "#A0A0A0", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px", display: "flex", alignItems: "center", gap: "5px" }}>
-                    <span style={{ fontSize: "11px" }}>~</span> Simulated
+                    Simulated
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
                     {current.simulated.map((item, i) => (
@@ -372,8 +308,6 @@ function UserGuide({ onDone, onSkip }) {
                 ))}
               </ul>
             )}
-
-            {/* Note / accent line at bottom of slide (optional) */}
             {(current.note || current.accent) && (
               <div style={{
                 padding:      "10px 14px",
@@ -389,8 +323,6 @@ function UserGuide({ onDone, onSkip }) {
               </div>
             )}
           </div>
-
-          {/* Footer: progress dots + navigation */}
           <div style={{
             display:        "flex",
             alignItems:     "center",
@@ -400,7 +332,6 @@ function UserGuide({ onDone, onSkip }) {
             gap:            "16px",
             borderTop:      "1px solid #1A1A1A",
           }}>
-            {/* Progress dots */}
             <div style={{ display: "flex", gap: 0, alignItems: "center" }}>
               {GUIDE_SLIDES.map((_, i) => (
                 <button
@@ -432,8 +363,6 @@ function UserGuide({ onDone, onSkip }) {
                 </button>
               ))}
             </div>
-
-            {/* Navigation buttons */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
               <button
                 onClick={onSkip}
@@ -445,7 +374,7 @@ function UserGuide({ onDone, onSkip }) {
                   fontSize:      "12px",
                 }}
               >
-                Skip to Dashboard →
+                Skip to Dashboard
               </button>
 
               {slide > 0 && (
@@ -454,7 +383,7 @@ function UserGuide({ onDone, onSkip }) {
                   className="dialog-button tour-secondary"
                   style={btnSecondary}
                 >
-                  ← Back
+                  Back
                 </button>
               )}
 
@@ -463,7 +392,7 @@ function UserGuide({ onDone, onSkip }) {
                 className="dialog-button tour-primary"
                 style={btnPrimary}
               >
-                {isLast ? "Start Tour →" : "Next →"}
+                {isLast ? "Start Tour" : "Next"}
               </button>
             </div>
           </div>
@@ -475,16 +404,7 @@ function UserGuide({ onDone, onSkip }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Spotlight — dark overlay with cutout + tooltip callout for one step
-// ---------------------------------------------------------------------------
-
-/**
- * The "hole" is created by a transparent <div> positioned exactly over the target
- * element. A massive box-shadow (0 0 0 9999px rgba(0,0,0,0.82)) fills everything
- * OUTSIDE that div with a dark overlay. The div itself is transparent — the
- * element underneath stays fully visible while the tour owns interaction.
- */
+// The shadow masks the rest of the screen while leaving the target visible.
 function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
   const dialogRef = useTourDialog(onSkip);
   const [tipHeight, setTipHeight] = useState(0);
@@ -514,13 +434,10 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
 
   return createPortal(
     <>
-      {/* Full-screen click-trap — clicking anywhere outside the tooltip skips */}
       <div
         style={{ position: "fixed", inset: 0, zIndex: 9000 }}
         onClick={onSkip}
       />
-
-      {/* Spotlight cutout */}
       {rect && <div
         className="tour-spotlight-mask"
         style={{
@@ -536,8 +453,6 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
           pointerEvents: "none",
         }}
       />}
-
-      {/* Tooltip callout */}
       <div
         ref={dialogRef}
         className="tour-dialog tour-spotlight"
@@ -564,12 +479,9 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Step counter */}
         <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--color-text-2)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "10px" }}>
           {stepIndex + 1} / {totalSteps}
         </div>
-
-        {/* Title */}
         <h2 id="tour-title" aria-live="polite" style={{
           marginTop: 0,
           fontWeight: "normal",
@@ -583,8 +495,6 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
         }}>
           {step.title}
         </h2>
-
-        {/* Bullets */}
         <ul style={{ margin: "0 0 20px 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "7px" }}>
           {step.bullets.map((b, i) => (
             <li key={i} style={{ fontSize: "14px", color: "var(--color-text-2)", lineHeight: "1.5", display: "flex", gap: "8px" }}>
@@ -596,8 +506,6 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
             </li>
           ))}
         </ul>
-
-        {/* Navigation */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <button
             onClick={onSkip}
@@ -612,7 +520,7 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
             className="dialog-button tour-primary"
             style={btnPrimary}
           >
-            {stepIndex < totalSteps - 1 ? "Next →" : "Done"}
+            {stepIndex < totalSteps - 1 ? "Next" : "Done"}
           </button>
         </div>
       </div>
@@ -621,26 +529,10 @@ function Spotlight({ step, stepIndex, totalSteps, rect, onNext, onSkip }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main export
-// ---------------------------------------------------------------------------
-
-/**
- * GuidedTour
- *
- * Two-phase flow:
- *   Phase 1: UserGuide (5 educational slides) — purely modal, no DOM targeting
- *   Phase 2: Spotlight tour (3 steps) — highlights specific dashboard elements
- *
- * Purely controlled: parent sets show=true to start, onDone fires when finished.
- * "Get Started" on LandingPage is the only entry point.
- */
 export default function GuidedTour({ show, onDone }) {
   const [phase,     setPhase]     = useState("guide");  // "guide" | "spotlight"
   const [stepIndex, setStepIndex] = useState(0);
   const [rect,      setRect]      = useState(null);
-
-  // Reset to phase 1 whenever the tour is freshly triggered.
   useEffect(() => {
     if (show) {
       setPhase("guide");
@@ -709,8 +601,6 @@ export default function GuidedTour({ show, onDone }) {
   }, [stepIndex, onDone]);
 
   if (!show) return null;
-
-  // Phase 1: educational guide
   if (phase === "guide") {
     return (
       <UserGuide
@@ -719,8 +609,6 @@ export default function GuidedTour({ show, onDone }) {
       />
     );
   }
-
-  // Phase 2: spotlight tour
   return (
     <Spotlight
       step={STEPS[stepIndex]}
