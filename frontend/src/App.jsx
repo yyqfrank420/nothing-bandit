@@ -12,7 +12,7 @@
  * Outputs: Full-page dashboard UI
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   getState,
   reset,
@@ -126,82 +126,10 @@ const CHANNEL_INFO = {
 
 // Keep the button name visible while an operation is pending.
 function Btn({ onClick, disabled, variant = "default", children, title, spinning = false }) {
-  const base = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
-    padding: "8px 16px",
-    border: "1px solid",
-    borderRadius: "3px",
-    fontFamily: "inherit",
-    fontSize: "11px",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
-    cursor: disabled ? "not-allowed" : "pointer",
-    transition: "all 200ms ease",
-    outline: "none",
-    opacity: disabled ? 0.4 : 1,
-    whiteSpace: "nowrap",
-  };
-
-  const variants = {
-    default: {
-      background: "transparent",
-      borderColor: "#333",
-      color: "#A0A0A0",
-    },
-    primary: {
-      background: "#1A1A1A",
-      borderColor: "#444",
-      color: "#F0F0F0",
-    },
-    danger: {
-      background: "transparent",
-      borderColor: "#FF0000",
-      color: "#FF6666",
-    },
-    active: {
-      background: "#FF0000",
-      borderColor: "#FF0000",
-      color: "#0D0D0D",
-    },
-    shock: {
-      background: "rgba(255,0,0,0.08)",
-      borderColor: "rgba(255,0,0,0.4)",
-      color: "#FF6666",
-    },
-  };
-
   return (
-    <button
-      className="dashboard-button"
-      aria-busy={spinning || undefined}
-      style={{ ...base, ...variants[variant] }}
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      onMouseEnter={(e) => {
-        if (!disabled) {
-          e.currentTarget.style.borderColor = variant === "danger" || variant === "shock" ? "#FF4444" : "#666";
-          e.currentTarget.style.color = variant === "danger" || variant === "shock" ? "#FF7777" : variant === "active" ? "#0D0D0D" : "#F0F0F0";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!disabled) {
-          Object.assign(e.currentTarget.style, variants[variant]);
-        }
-      }}
-    >
-      {spinning ? (
-        <span aria-hidden="true" style={{
-          display: "inline-block",
-          width: "10px", height: "10px",
-          border: "1.5px solid rgba(255,255,255,0.2)",
-          borderTopColor: "#F0F0F0",
-          borderRadius: "50%",
-          animation: "spin 500ms linear infinite",
-        }} />
-      ) : null}
+    <button className={`dashboard-button dashboard-button--${variant}`}
+      aria-busy={spinning || undefined} onClick={onClick} disabled={disabled} title={title}>
+      {spinning && <span className="loading-spinner" aria-hidden="true" />}
       {children}
     </button>
   );
@@ -225,6 +153,7 @@ function ShockBanner({ shock, onDismiss }) {
 
   return (
     <div
+      className="shock-banner"
       style={{
         position: "fixed",
         top: "20px",
@@ -252,7 +181,6 @@ function ShockBanner({ shock, onDismiss }) {
                 height: "8px",
                 borderRadius: "50%",
                 background: "#FF0000",
-                animation: "pulse 1.5s infinite",
                 flexShrink: 0,
               }}
             />
@@ -301,8 +229,6 @@ function ShockBanner({ shock, onDismiss }) {
             padding: "2px 4px",
             flexShrink: 0,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "#FF4444"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = "#A0A0A0"; }}
         >
           ×
         </button>
@@ -312,7 +238,19 @@ function ShockBanner({ shock, onDismiss }) {
 }
 
 // Floating info card for the channel legend — shows plain-English parameters on hover.
-function ChannelTooltip({ channelId, x, y }) {
+function ChannelTooltip({ channelId, x, y, onEnter, onLeave, onBlur, onDismiss }) {
+  const tooltipRef = useRef(null);
+  useLayoutEffect(() => {
+    const position = () => {
+      if (!tooltipRef.current) return;
+      const rect = tooltipRef.current.getBoundingClientRect();
+      tooltipRef.current.style.left = `${Math.max(16, Math.min(x, window.innerWidth - rect.width - 16))}px`;
+      tooltipRef.current.style.top = `${Math.max(16, Math.min(y, window.innerHeight - rect.height - 16))}px`;
+    };
+    position();
+    window.addEventListener("resize", position);
+    return () => window.removeEventListener("resize", position);
+  }, [channelId, x, y]);
   if (!channelId) return null;
   const info  = CHANNEL_INFO[channelId];
   const color = CHANNEL_COLORS[channelId];
@@ -320,39 +258,29 @@ function ChannelTooltip({ channelId, x, y }) {
   if (!info) return null;
 
   return (
-    <div style={{
-      position: "fixed",
-      left: `${x}px`,
-      top:  `${y}px`,
-      zIndex: 600,
-      background: "#161616",
-      border: `1px solid ${color}44`,
-      borderRadius: "4px",
-      padding: "12px 14px",
-      width: "220px",
-      fontFamily: "LetteraMonoLL, monospace",
-      boxShadow: "0 4px 20px rgba(0,0,0,0.55)",
-      pointerEvents: "none",
-    }}>
+    <div ref={tooltipRef} tabIndex={0} onFocus={onEnter} onBlur={onBlur}
+      onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onDismiss(); } }}
+      onMouseEnter={onEnter} onMouseLeave={onLeave} className="channel-tooltip" id={`channel-tooltip-${channelId}`} role="tooltip"
+      style={{ left: x, top: y, borderColor: `${color}66` }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
         <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: color, flexShrink: 0 }} />
-        <span style={{ fontSize: "11px", color: "#E0E0E0", letterSpacing: "0.05em" }}>{name}</span>
+        <span style={{ fontSize: "13px", color: "#E0E0E0", letterSpacing: "0.05em" }}>{name}</span>
       </div>
-      <div style={{ fontSize: "10px", color: "#888", marginBottom: "10px", lineHeight: "1.5" }}>
+      <div style={{ fontSize: "13px", color: "#888", marginBottom: "10px", lineHeight: "1.5" }}>
         {info.what}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "3px", marginBottom: "10px" }}>
-        <div style={{ fontSize: "9px", color: "var(--color-text-2)" }}>
+        <div style={{ fontSize: "12px", color: "var(--color-text-2)" }}>
           Click Rate: <span style={{ color: "#C0C0C0" }}>{info.ctr}</span>
         </div>
-        <div style={{ fontSize: "9px", color: "var(--color-text-2)" }}>
+        <div style={{ fontSize: "12px", color: "var(--color-text-2)" }}>
           Ad Return: <span style={{ color: "#C0C0C0" }}>{info.roas}</span>
         </div>
-        <div style={{ fontSize: "9px", color: "var(--color-text-2)" }}>
+        <div style={{ fontSize: "12px", color: "var(--color-text-2)" }}>
           Acq. Cost: <span style={{ color: "#C0C0C0" }}>{info.cac}</span>
         </div>
       </div>
-      <div style={{ fontSize: "9px", color: "var(--color-text-2)", borderTop: "1px solid #1E1E1E", paddingTop: "8px", lineHeight: "1.6" }}>
+      <div style={{ fontSize: "12px", color: "var(--color-text-2)", borderTop: "1px solid #1E1E1E", paddingTop: "8px", lineHeight: "1.6" }}>
         {info.note}
       </div>
     </div>
@@ -364,7 +292,7 @@ function ChannelTooltip({ channelId, x, y }) {
 function LoadingOverlay({ visible, label = "Simulating..." }) {
   if (!visible) return null;
   return (
-    <div role="status" aria-live="polite" style={{
+    <div className="loading-overlay" role="status" aria-live="polite" style={{
       position: "fixed",
       inset: 0,
       background: "rgba(13,13,13,0.7)",
@@ -375,16 +303,8 @@ function LoadingOverlay({ visible, label = "Simulating..." }) {
       backdropFilter: "blur(2px)",
     }}>
       <div style={{ textAlign: "center" }}>
-        <div style={{
-          width: "32px",
-          height: "32px",
-          border: "2px solid #333",
-          borderTopColor: "var(--color-accent)",
-          borderRadius: "50%",
-          animation: "spin 600ms linear infinite",
-          margin: "0 auto 16px",
-        }} />
-        <p style={{ fontSize: "11px", color: "var(--color-text-2)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+        <span className="loading-spinner loading-spinner--large" aria-hidden="true" />
+        <p style={{ fontSize: "14px", color: "var(--color-text-2)" }}>
           {label}
         </p>
       </div>
@@ -412,6 +332,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [shockPending, setShockPending] = useState(false);
   const [shocksExhausted, setShocksExhausted] = useState(false);
+  const tooltipDismissTimerRef = useRef(null);
   const [channelTooltip, setChannelTooltip] = useState(null);  // { channelId, x, y }
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -428,6 +349,8 @@ export default function App() {
   const loadingRef        = useRef(false);
   const currentDayRef     = useRef(0);
   const viewDayRef        = useRef(0);      // ref so slider onChange can read it without stale closure
+
+  useEffect(() => () => clearTimeout(tooltipDismissTimerRef.current), []);
 
   // Load existing data on mount so charts restore after page refresh.
   // Uses /api/state (single round-trip) instead of three parallel GETs —
@@ -722,7 +645,7 @@ export default function App() {
             50%       { opacity: 0.35; transform: scale(1.5); }
           }
         `}</style>
-        <div style={{
+        <div className="decorative-motion" role="status" aria-label="Loading simulation" style={{
           width:        "10px",
           height:       "10px",
           borderRadius: "50%",
@@ -750,55 +673,6 @@ export default function App() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50%       { opacity: 0.6; transform: scale(1.3); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes dayGlow {
-          0%   { filter: brightness(0.6) blur(0.5px); transform: scale(0.94) translateY(3px); }
-          35%  { filter: brightness(2) drop-shadow(0 0 10px rgba(255,255,255,0.65)); transform: scale(1.07) translateY(0); }
-          100% { filter: brightness(1); transform: scale(1) translateY(0); }
-        }
-        @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to   { transform: translateX(0); opacity: 1; }
-        }
-        input[type="range"].timeline-slider {
-          -webkit-appearance: none;
-          appearance: none;
-          height: 2px;
-          border-radius: 1px;
-          outline: none;
-          cursor: pointer;
-        }
-        input[type="range"].timeline-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          background: #FF0000;
-          cursor: pointer;
-          transition: transform 150ms ease;
-        }
-        input[type="range"].timeline-slider:hover::-webkit-slider-thumb {
-          transform: scale(1.5);
-        }
-        input[type="range"].timeline-slider::-moz-range-thumb {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          background: #FF0000;
-          border: none;
-          cursor: pointer;
-        }
-        input[type="range"].timeline-slider::-moz-range-track {
-          height: 2px;
-          border-radius: 1px;
-        }
       `}</style>
 
       {/* Shock banner — dismissing scrolls to the impact panel below */}
@@ -807,7 +681,7 @@ export default function App() {
           shock={activeShock}
           onDismiss={() => {
             setActiveShock(null);
-            shockPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            shockPanelRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
           }}
         />
       )}
@@ -828,7 +702,23 @@ export default function App() {
       <LoadingOverlay visible={isLoadingDays > 1} label={simulatingLabel || "Resetting simulation..."} />
 
       {/* Channel legend tooltip */}
-      {channelTooltip && <ChannelTooltip {...channelTooltip} />}
+      {channelTooltip && <ChannelTooltip {...channelTooltip}
+        onEnter={() => clearTimeout(tooltipDismissTimerRef.current)}
+        onLeave={() => {
+          if (!document.activeElement?.closest(".channel-legend-button, .channel-tooltip")) {
+            tooltipDismissTimerRef.current = setTimeout(() => setChannelTooltip(null), 150);
+          }
+        }}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget) && !e.relatedTarget?.closest(".channel-legend-button")) {
+            clearTimeout(tooltipDismissTimerRef.current); setChannelTooltip(null);
+          }
+        }}
+        onDismiss={() => {
+          clearTimeout(tooltipDismissTimerRef.current);
+          document.querySelector(`[data-channel-id="${channelTooltip.channelId}"]`)?.focus();
+          setChannelTooltip(null);
+        }} />}
 
       {/* Page wrapper */}
       <div style={{
@@ -840,350 +730,93 @@ export default function App() {
         {/* ----------------------------------------------------------------
             Header
             ---------------------------------------------------------------- */}
-        <header className="dashboard-header" style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 100,
-          background: "rgba(13,13,13,0.92)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid var(--color-border)",
-          padding: "0 32px",
-        }}>
-          <div className="dashboard-header-inner" style={{
-            maxWidth: "1600px",
-            margin: "0 auto",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            height: "60px",
-            gap: "24px",
-          }}>
-            {/* Brand */}
-            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexShrink: 0 }}>
-              {/* Nothing dot logo — pulses red during auto mode */}
-              <div style={{
-                position: "relative",
-                width: "10px",
-                height: "10px",
-                flexShrink: 0,
-              }}>
-                {autoRunning && (
-                  <div className="decorative-motion" style={{
-                    position: "absolute",
-                    inset: "-4px",
-                    borderRadius: "50%",
-                    background: "#FF0000",
-                    animation: "shockRing 1.2s ease-out infinite",
-                  }} />
-                )}
-                <div style={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "50%",
-                  background: "#FF0000",
-                  position: "relative",
-                  zIndex: 1,
-                }} />
-              </div>
-              <div>
-                <div style={{
-                  fontFamily: "Ndot55, monospace",
-                  fontSize: "14px",
-                  color: "#F0F0F0",
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  lineHeight: 1,
-                }}>
-                  Nothing Bandit™
-                </div>
-                <div style={{
-                  fontSize: "10px",
-                  color: "var(--color-text-2)",
-                  letterSpacing: "0.08em",
-                  marginTop: "2px",
-                }}>
-                  Budget Allocation System
+        <a className="skip-link" href="#dashboard-main">Skip to dashboard</a>
+        <header className="dashboard-header">
+          <div className="dashboard-header-inner">
+            <div className="dashboard-masthead">
+              <div className="dashboard-brand">
+                <span className="brand-dot" aria-hidden="true" />
+                <div>
+                  <h1>Nothing Bandit™</h1>
+                  <p>Budget Allocation System</p>
                 </div>
               </div>
-            </div>
-
-            {/* Replay timeline spans the simulated days. */}
-            <div className="dashboard-timeline" style={{
-              flex: 1,
-              maxWidth: "400px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "5px",
-            }}>
-              {/* Top row: label + day counter + replay controls */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "10px", color: "var(--color-text-2)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                  Campaign · {MAX_DAYS} days
-                </span>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  {isReplaying && (
-                    <>
-                      <span style={{
-                        fontSize: "9px",
-                        color: "#FF6666",
-                        letterSpacing: "0.1em",
-                        border: "1px solid rgba(255,100,100,0.3)",
-                        padding: "2px 5px",
-                        borderRadius: "2px",
-                        fontFamily: "LetteraMonoLL, monospace",
-                      }}>REPLAY</span>
-                      <button
-                        className="dashboard-icon-button"
+              <div className="dashboard-timeline">
+                <div className="timeline-heading">
+                  <span className="timeline-label">Campaign · {MAX_DAYS} days</span>
+                  <div className="timeline-current">
+                    {isReplaying && <>
+                      <span className="replay-label">Replay</span>
+                      <button className="dashboard-button dashboard-button--default timeline-now"
                         disabled={operationBusy || autoRunning}
-                        onClick={() => { setViewDay(currentDay); viewDayRef.current = currentDay; }}
-                        style={{
-                          background: "none", border: "1px solid #2A2A2A", color: "var(--color-text-2)",
-                          fontSize: "9px", letterSpacing: "0.08em", padding: "2px 7px",
-                          borderRadius: "2px", cursor: "pointer", textTransform: "uppercase",
-                          fontFamily: "LetteraMonoLL, monospace",
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#444"; e.currentTarget.style.color = "#999"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A2A"; e.currentTarget.style.color = "#A0A0A0"; }}
-                      >NOW →</button>
-                    </>
-                  )}
-                  {/* key={currentDay} causes React to re-mount this span on each day change,
-                      restarting the CSS animation from 0% every time. */}
-                  <span
-                    className="decorative-motion"
-                    key={currentDay}
-                    style={{
-                      fontFamily: "Ndot55, monospace",
-                      fontSize: "18px",
-                      color: currentDay === 0 ? "var(--color-text-2)" : isReplaying ? "#FF6666" : "#F0F0F0",
-                      letterSpacing: "0.06em",
-                      transition: "color 300ms",
-                      display: "inline-block",  // required for transform in dayGlow
-                      // Only glow on manual +1 Day clicks — not during auto (too noisy) or replay.
-                      animation: currentDay > 0 && !isReplaying && !autoRunning ? "dayGlow 600ms ease-out forwards" : "none",
-                    }}
-                  >
-                    {currentDay === 0 ? "---" : isReplaying ? `D${viewDay}` : `DAY ${currentDay}`}
-                  </span>
+                        onClick={() => { setViewDay(currentDay); viewDayRef.current = currentDay; }}>Now</button>
+                    </>}
+                    <span className="timeline-day">
+                      {currentDay === 0 ? "DAY 0" : isReplaying ? `DAY ${viewDay}` : `DAY ${currentDay}`}
+                    </span>
+                  </div>
                 </div>
-              </div>
-
-              {/* Native range uses all available width for the recorded days. */}
-              {currentDay > 0 ? (
-                <input
-                  type="range"
-                  className="timeline-slider"
-                  min={1}
-                  max={currentDay}
-                  value={viewDay || 1}
-                  aria-label="Campaign replay day"
-                  aria-valuetext={`Day ${viewDay} of ${currentDay} simulated days`}
-                  disabled={operationBusy || autoRunning}
-                  title="Drag to replay past days"
-                  onChange={(e) => {
-                    // Clamp to simulated days — can't replay what hasn't happened yet.
-                    const d = Math.min(Number(e.target.value), currentDay);
-                    setViewDay(d);
-                    viewDayRef.current = d;
-                  }}
-                  style={{
-                    width: "100%",
-                    background: (() => {
+                {currentDay > 0 ? (
+                  <input type="range" className="timeline-slider" min={1} max={currentDay} value={viewDay || 1}
+                    aria-label="Campaign replay day" aria-valuetext={`Day ${viewDay} of ${currentDay} simulated days`}
+                    disabled={operationBusy || autoRunning} title="Drag to replay past days"
+                    onChange={(e) => {
+                      const d = Math.min(Number(e.target.value), currentDay);
+                      setViewDay(d); viewDayRef.current = d;
+                    }}
+                    style={{ backgroundImage: (() => {
                       const vPct = (viewDay / currentDay) * 100;
                       const cPct = 100;
-                      const fillColor = isReplaying ? "#FF4444"
-                        : autoRunning ? "#22D3EE" : "#3A3A3A";
+                      const fillColor = isReplaying ? "#FF4444" : autoRunning ? "#22D3EE" : "#3A3A3A";
                       const simulatedColor = isReplaying ? "rgba(255,68,68,0.18)" : "#232323";
                       return `linear-gradient(90deg, ${fillColor} ${vPct}%, ${simulatedColor} ${vPct}%, ${simulatedColor} ${cPct}%, #1A1A1A ${cPct}%)`;
-                    })(),
-                  }}
-                />
-              ) : (
-                <div style={{ height: "2px", background: "#1A1A1A", borderRadius: "1px" }} />
-              )}
-
-              {/* Simulated timeline endpoints */}
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: "9px", color: "var(--color-text-2)", fontFamily: "LetteraMonoLL, monospace" }}>D1</span>
-                <span style={{ fontSize: "9px", color: "var(--color-text-2)", fontFamily: "LetteraMonoLL, monospace" }}>D{currentDay || MAX_DAYS}</span>
+                    })() }} />
+                ) : <div className="timeline-placeholder" />}
+                <div className="timeline-endpoints"><span>D1</span><span>D{currentDay || MAX_DAYS}</span></div>
               </div>
             </div>
-
-            {/* Controls */}
-            <div className="dashboard-controls" data-tour="controls" style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-              {/* Inline status — always occupies space so buttons don't shift on load/idle toggle */}
-              <div className="dashboard-status" role="status" aria-live="polite" style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                gap: "6px",
-                width: "130px",   // fixed width — prevents layout shift
-                flexShrink: 0,
-              }}>
-                <div style={{
-                  width: "10px", height: "10px",
-                  border: "1px solid #444",
-                  borderTopColor: autoRunning ? "var(--color-info)" : "var(--color-text)",
-                  borderRadius: "50%",
-                  animation: (isLoadingDays > 1 || autoRunning) ? "spin 500ms linear infinite" : "none",
-                  flexShrink: 0,
-                  opacity: (isLoadingDays > 1 || autoRunning) ? 1 : 0,
-                  transition: "opacity 200ms",
-                }} />
-                <span style={{
-                  fontSize: "10px", color: "var(--color-text-2)",
-                  letterSpacing: "0.06em", whiteSpace: "nowrap",
-                  fontFamily: "LetteraMonoLL, monospace",
-                  opacity: (isLoadingDays > 1 || autoRunning) && simulatingLabel ? 1 : 0,
-                  transition: "opacity 200ms",
-                }}>
-                  {simulatingLabel || "\u00A0"}
-                </span>
+            <div className="dashboard-controls" data-tour="controls">
+              <div className="simulation-controls" role="group" aria-label="Simulation controls">
+                <Btn onClick={() => handleSimulate(1)} disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
+                  variant="primary" title="Simulate 1 day [Right arrow]" spinning={isLoadingDays === 1}>+1 Day</Btn>
+                <Btn onClick={() => handleSimulate(7)} disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
+                  variant="primary" title="Simulate 1 week">+1 Week</Btn>
+                <Btn onClick={() => handleSimulate(30)} disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
+                  variant="primary" title="Simulate 1 month">+1 Month</Btn>
+                <Btn onClick={handleAutoToggle} disabled={!autoRunning && (operationBusy || currentDay >= MAX_DAYS)}
+                  variant={autoRunning ? "active" : "primary"} title="Auto-run [Space]">{autoRunning ? "Stop" : "Auto"}</Btn>
               </div>
-              {/* +1 Day: inline spinner instead of full-screen overlay */}
-              <Btn
-                onClick={() => handleSimulate(1)}
-                disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
-                variant="primary"
-                title="Simulate 1 day  [→]"
-                spinning={isLoadingDays === 1}
-              >
-                +1 Day
-              </Btn>
-              <Btn
-                onClick={() => handleSimulate(7)}
-                disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
-                variant="primary"
-                title="Simulate 1 week"
-              >
-                +1 Wk
-              </Btn>
-              <Btn
-                onClick={() => handleSimulate(30)}
-                disabled={operationBusy || autoRunning || currentDay >= MAX_DAYS}
-                variant="primary"
-                title="Simulate 1 month"
-              >
-                +1 Mo
-              </Btn>
-              <Btn
-                onClick={handleAutoToggle}
-                disabled={!autoRunning && (operationBusy || currentDay >= MAX_DAYS)}
-                variant={autoRunning ? "active" : "primary"}
-                title="Auto-run — speed set in Settings  [Space]"
-              >
-                {autoRunning ? "■ Stop" : "▶ Auto"}
-              </Btn>
-
-              {/* Divider */}
-              <div style={{ width: "1px", height: "24px", background: "#282828" }} />
-
-              <Btn
-                onClick={handleShock}
-                disabled={operationBusy || shocksExhausted}
-                spinning={shockPending}
-                variant="shock"
-                title={shocksExhausted ? "All 10 shock events used — Reset to replay" : "Trigger a random market shock event"}
-              >
-                {shocksExhausted ? "⚡ Exhausted" : "⚡ Shock"}
-              </Btn>
-              <Btn
-                onClick={handleReset}
-                disabled={operationBusy}
-                variant="danger"
-                title="Reset simulation to day 0"
-              >
-                Reset
-              </Btn>
-
-              {/* Divider */}
-              <div style={{ width: "1px", height: "24px", background: "#282828" }} />
-
-              {/* ? keyboard shortcuts help icon */}
-              <div className="shortcut-help" style={{ position: "relative" }}>
-                <button
-                  className="dashboard-icon-button"
-                  aria-label="Keyboard shortcuts"
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: "28px", height: "28px",
-                    background: "transparent",
-                    border: "1px solid #222",
-                    borderRadius: "50%", cursor: "pointer",
-                    color: "var(--color-text-2)", fontSize: "11px",
-                    fontFamily: "LetteraMonoLL, monospace",
-                    transition: "all 200ms",
-                  }}
-                  title="Keyboard shortcuts"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "#444";
-                    e.currentTarget.style.color = "#C0C0C0";
-                    e.currentTarget.nextSibling.style.opacity = "1";
-                    e.currentTarget.nextSibling.style.pointerEvents = "none";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "#222";
-                    e.currentTarget.style.color = "#A0A0A0";
-                    e.currentTarget.nextSibling.style.opacity = "0";
-                  }}
-                >
-                  ?
-                </button>
-                {/* Keyboard shortcuts tooltip — appears on ? hover */}
-                <div style={{
-                  position: "absolute",
-                  top: "calc(100% + 8px)",
-                  right: 0,
-                  background: "#161616",
-                  border: "1px solid #2A2A2A",
-                  borderRadius: "4px",
-                  padding: "10px 14px",
-                  fontFamily: "LetteraMonoLL, monospace",
-                  fontSize: "10px",
-                  color: "#888",
-                  whiteSpace: "nowrap",
-                  lineHeight: "2",
-                  opacity: 0,
-                  transition: "opacity 150ms",
-                  zIndex: 300,
-                  pointerEvents: "none",
-                }}>
-                  <div style={{ color: "var(--color-text-2)", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Keyboard Shortcuts</div>
-                  <div><span style={{ color: "#C0C0C0" }}>Space</span> · ▶/■ Auto play/pause</div>
-                  <div><span style={{ color: "#C0C0C0" }}>→</span> · +1 Day</div>
-                  <div><span style={{ color: "#C0C0C0" }}>←</span> · Replay back 1 day</div>
-                  <div><span style={{ color: "#C0C0C0" }}>Shift+→</span> · Jump to current day</div>
+              <div className="scenario-controls" role="group" aria-label="Scenario controls">
+                <Btn onClick={handleShock} disabled={operationBusy || shocksExhausted} spinning={shockPending}
+                  variant="shock" title={shocksExhausted ? "All 10 shock events used. Reset to replay." : "Trigger a random market shock event"}>
+                  {shocksExhausted ? "Exhausted" : "Shock"}
+                </Btn>
+                <Btn onClick={handleReset} disabled={operationBusy} variant="danger" title="Reset simulation to day 0">Reset</Btn>
+              </div>
+              <div className="utility-controls">
+                <div className="shortcut-help">
+                  <button className="dashboard-button dashboard-button--default" aria-label="Keyboard shortcuts"
+                    onClick={(e) => e.currentTarget.focus()} aria-describedby="keyboard-shortcuts" title="Keyboard shortcuts">Keys</button>
+                  <div className="shortcut-tooltip" id="keyboard-shortcuts" role="tooltip">
+                    <p>Keyboard shortcuts</p>
+                    <div><kbd>Space</kbd> Auto play/pause</div>
+                    <div><kbd>→</kbd> +1 Day</div>
+                    <div><kbd>←</kbd> Replay back 1 day</div>
+                    <div><kbd>Shift+→</kbd> Current day</div>
+                  </div>
                 </div>
+                <button className="dashboard-button dashboard-button--default" aria-label="Open settings"
+                  aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)} title="Settings">Settings</button>
               </div>
-
-              {/* Settings button */}
-              <button
-                className="dashboard-icon-button"
-                aria-label="Open settings"
-                aria-expanded={settingsOpen}
-                onClick={() => setSettingsOpen(true)}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: "32px", height: "32px",
-                  background: settingsOpen ? "#1E1E1E" : "transparent",
-                  border: `1px solid ${settingsOpen ? "#444" : "#282828"}`,
-                  borderRadius: "3px", cursor: "pointer", color: "var(--color-text-2)",
-                  fontSize: "14px", transition: "all 200ms",
-                }}
-                title="Settings"
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#444"; e.currentTarget.style.color = "#C0C0C0"; }}
-                onMouseLeave={(e) => {
-                  if (!settingsOpen) {
-                    e.currentTarget.style.borderColor = "#282828";
-                    e.currentTarget.style.color = "#A0A0A0";
-                  }
-                }}
-              >
-                ⚙
-              </button>
+              <div className="dashboard-status" role="status" aria-live="polite">
+                {(operationBusy || autoRunning) && <span className="loading-spinner" aria-hidden="true" />}
+                <span>{shockPending ? "Applying shock…" : isLoadingDays > 0
+                  ? (simulatingLabel || (isLoadingDays === 1 ? "Simulating 1 day…" : "Resetting…"))
+                  : operationBusy ? "Replaying days…" : autoRunning ? "Auto running"
+                  : currentDay >= MAX_DAYS ? "Campaign complete" : "Ready"}</span>
+              </div>
             </div>
           </div>
-
         </header>
 
         {/* Error bar */}
@@ -1204,90 +837,49 @@ export default function App() {
         {/* ----------------------------------------------------------------
             Main content — always rendered; charts show day 0 state when empty
             ---------------------------------------------------------------- */}
-        <main className="dashboard-main" style={{
-          maxWidth: "1600px",
-          margin: "0 auto",
-          padding: "32px 32px 0",
-        }}>
+        <main className="dashboard-main" id="dashboard-main" tabIndex={-1}>
           {/* Day 0 call-to-action — shown instead of blank charts */}
           {currentDay === 0 && isLoadingDays === 0 && (
-            <div className="dashboard-empty-state" style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "14px 20px",
-              marginBottom: "24px",
-              background: "#111",
-              border: "1px solid #1E1E1E",
-              borderRadius: "4px",
-              animation: "fadeIn 400ms ease",
-            }}>
+            <div className="dashboard-empty-state">
               <div>
                 <span style={{
-                  fontFamily: "Ndot55, monospace", fontSize: "13px",
-                  color: "var(--color-text-2)", letterSpacing: "0.08em",
+                  fontFamily: "var(--font-display)", fontSize: "16px",
+                  color: "var(--color-text)",
                 }}>
                   DAY 0 · AWAITING SIMULATION
                 </span>
                 <span style={{ fontSize: "11px", color: "var(--color-text-2)", marginLeft: "16px" }}>
-                  All metrics at baseline. Click +1 Day or ▶ Auto to begin.
+                  All metrics at baseline. Click +1 Day or Auto to begin.
                 </span>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
                 <Btn onClick={() => handleSimulate(1)} disabled={operationBusy || autoRunning} variant="primary">+1 Day</Btn>
-                <Btn onClick={handleAutoToggle} disabled={operationBusy || autoRunning} variant="primary">▶ Auto</Btn>
+                <Btn onClick={handleAutoToggle} disabled={operationBusy || autoRunning} variant="primary">Auto</Btn>
               </div>
             </div>
           )}
 
             {/* Channel legend — shared across all charts */}
-            <div className="dashboard-legend" style={{
-              display: "flex",
-              gap: "20px",
-              flexWrap: "wrap",
-              marginBottom: "28px",
-              padding: "12px 16px",
-              background: "#111",
-              border: "1px solid var(--color-border)",
-              borderRadius: "4px",
-              alignItems: "center",
-            }}>
-              <span style={{ fontSize: "10px", color: "var(--color-text-2)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                Channels
-              </span>
-              {Object.entries(CHANNEL_NAMES).map(([id, name]) => (
-                <div
-                  key={id}
-                  style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "default" }}
-                  onMouseEnter={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setChannelTooltip({ channelId: Number(id), x: rect.left, y: rect.bottom + 8 });
-                  }}
-                  onMouseLeave={() => setChannelTooltip(null)}
-                >
-                  <div style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    background: CHANNEL_COLORS[id],
-                    flexShrink: 0,
-                  }} />
-                  <span style={{ fontSize: "11px", color: "#888" }}>{name}</span>
-                </div>
-              ))}
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "16px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <div style={{ width: "20px", height: "2px", background: "#4ADE80" }} />
-                  <span style={{ fontSize: "11px", color: "#888" }}>Bandit</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <div style={{
-                    width: "20px",
-                    height: "2px",
-                    background: "repeating-linear-gradient(90deg, #505050 0, #505050 4px, transparent 4px, transparent 8px)",
-                  }} />
-                  <span style={{ fontSize: "11px", color: "#888" }}>Static</span>
-                </div>
+            <div className="dashboard-legend" aria-label="Chart legend">
+              <span className="legend-label">Channels</span>
+              {Object.entries(CHANNEL_NAMES).map(([id, name]) => {
+                const showInfo = (e) => {
+                  clearTimeout(tooltipDismissTimerRef.current);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setChannelTooltip({ channelId: Number(id), x: rect.left, y: rect.bottom + 8 });
+                };
+                return <button key={id} data-channel-id={id} className="channel-legend-button"
+                  aria-describedby={channelTooltip?.channelId === Number(id) ? `channel-tooltip-${id}` : undefined}
+                  onFocus={showInfo} onMouseEnter={showInfo} onClick={showInfo}
+                  onBlur={(e) => { if (!e.relatedTarget?.closest(".channel-tooltip")) { clearTimeout(tooltipDismissTimerRef.current); setChannelTooltip(null); } }}
+                  onMouseLeave={(e) => { if (document.activeElement !== e.currentTarget) tooltipDismissTimerRef.current = setTimeout(() => setChannelTooltip(null), 150); }}
+                  onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); clearTimeout(tooltipDismissTimerRef.current); setChannelTooltip(null); } }}>
+                  <span className="channel-dot" style={{ background: CHANNEL_COLORS[id] }} aria-hidden="true" />{name}
+                </button>;
+              })}
+              <div className="allocator-legend">
+                <span><i className="allocator-line allocator-line--bandit" aria-hidden="true" />Bandit</span>
+                <span><i className="allocator-line allocator-line--static" aria-hidden="true" />Static</span>
               </div>
             </div>
 
@@ -1300,62 +892,24 @@ export default function App() {
               />
             </div>
 
-            {/* Section label — data-tour anchors the spotlight to this slim element */}
-            <div
-              data-tour="allocation-grid"
-              style={{
-                fontSize: "10px",
-                color: "var(--color-text-2)",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                marginBottom: "12px",
-                paddingLeft: "2px",
-              }}
-            >
-              3 Parallel Bandits — each optimising a different objective function independently
+            <div className="section-heading" data-tour="allocation-grid">
+              <h2 className="section-title">3 Parallel Bandits</h2>
+              <p className="section-description">Each optimises a different objective independently.</p>
             </div>
 
             {/* 3-column grid — one column per objective */}
-            <div className="objective-grid" style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: "1px",
-              background: "var(--color-border)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "4px",
-              overflow: "hidden",
-              marginBottom: "32px",
-            }}>
+            <div className="objective-grid">
               {OBJECTIVES.map((obj) => (
                 <div key={obj} style={{ background: "var(--color-bg)" }}>
-                  {/* Objective header — short code large, full name below */}
-                  <div style={{
-                    padding: "16px 20px 12px",
-                    borderBottom: "1px solid var(--color-border)",
-                  }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-                      <span style={{
-                        fontFamily: "Ndot55, monospace",
-                        fontSize: "18px",
-                        color: "#F0F0F0",
-                        letterSpacing: "0.12em",
-                      }}>
-                        {OBJECTIVE_SHORT[obj]}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text-2)", marginTop: "3px" }}>
-                      {OBJECTIVE_LABELS[obj]}
-                    </div>
-                    <div style={{ fontSize: "10px", color: "var(--color-text-2)", marginTop: "2px" }}>
-                      {OBJECTIVE_DESCRIPTIONS[obj]}
-                    </div>
+                  <div className="objective-heading">
+                    <h3 className="objective-code">{OBJECTIVE_SHORT[obj]}</h3>
+                    <p className="objective-name">{OBJECTIVE_LABELS[obj]}</p>
+                    <p className="objective-description">{OBJECTIVE_DESCRIPTIONS[obj]}</p>
                   </div>
 
                   {/* Budget allocation chart */}
-                  <div style={{ padding: "16px 20px 0" }}>
-                    <div style={{ fontSize: "10px", color: "var(--color-text-2)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
-                      Budget Allocation
-                    </div>
+                  <div className="objective-plot">
+                    <h4 className="chart-caption">Budget Allocation</h4>
                     <BudgetAllocationChart
                       results={visibleResults}
                       objective={obj}
@@ -1365,14 +919,9 @@ export default function App() {
                   </div>
 
                   {/* Bandit vs static chart */}
-                  <div style={{ padding: "0 20px 20px" }}>
-                    <div style={{ fontSize: "10px", color: "var(--color-text-2)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px", marginTop: "20px" }}>
-                      Bandit vs Static
-                      {/* Inline metric descriptor — one per objective column */}
-                      <span style={{ color: "var(--color-text-2)", textTransform: "none", letterSpacing: 0, marginLeft: "6px", fontSize: "9px" }}>
-                        — running {obj === "cac" ? "CAC" : obj === "roas" ? "ROAS" : "avg CTR"} (cumulative)
-                      </span>
-                    </div>
+                  <div className="objective-plot objective-plot--comparison">
+                    <h4 className="chart-caption">Bandit vs Static</h4>
+                    <p className="chart-description">Running {obj === "cac" ? "CAC" : obj === "roas" ? "ROAS" : "avg CTR"} (cumulative)</p>
                     <BanditVsStaticChart
                       results={visibleResults}
                       objective={obj}
@@ -1385,19 +934,10 @@ export default function App() {
             </div>
 
             {/* Business Outcomes — full width, with objective toggle */}
-            <section style={{ marginBottom: "32px" }}>
-              <div
-                data-tour="business-outcomes"
-                style={{
-                  fontSize: "10px",
-                  color: "var(--color-text-2)",
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  marginBottom: "16px",
-                  paddingLeft: "2px",
-                }}
-              >
-                Business Outcomes — Bandit vs Static Baseline
+            <section className="dashboard-section" aria-labelledby="business-heading">
+              <div className="section-heading" data-tour="business-outcomes">
+                <h2 className="section-title" id="business-heading">Business Outcomes</h2>
+                <p className="section-description">Bandit vs Static Baseline</p>
               </div>
               <BusinessMetricsChart
                 results={visibleResults}
@@ -1406,56 +946,18 @@ export default function App() {
             </section>
 
             {/* Bandit Confidence — 3 panels at bottom */}
-            <section style={{ marginBottom: "32px" }}>
-              <div style={{
-                fontSize: "10px",
-                color: "var(--color-text-2)",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                marginBottom: "4px",
-                paddingLeft: "2px",
-              }}>
-                Bandit Confidence
+            <section className="dashboard-section" aria-labelledby="confidence-heading">
+              <div className="section-heading">
+                <h2 className="section-title" id="confidence-heading">Bandit Confidence</h2>
+                <p className="section-description">Each curve shows a channel's estimated reward rate. Narrower curves indicate greater certainty.
+                  Dashed lines mark the most likely rate. Adjust reward thresholds in Settings.</p>
               </div>
-              {/* Interpretation note */}
-              <p style={{
-                fontSize: "11px",
-                maxWidth: "75ch",
-                color: "var(--color-text-2)",
-                marginBottom: "16px",
-                paddingLeft: "2px",
-                lineHeight: "1.7",
-              }}>
-                Each curve shows a channel's estimated reward rate. Narrower curves indicate greater certainty.
-                Dashed lines mark the most likely rate. Adjust reward thresholds in Settings.
-              </p>
-              <div className="confidence-grid" style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
-                gap: "1px",
-                background: "var(--color-border)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "4px",
-                overflow: "hidden",
-              }}>
+              <div className="confidence-grid">
                 {OBJECTIVES.map((obj) => (
-                  <div key={obj} style={{ background: "var(--color-bg)", padding: "16px 20px" }}>
-                    <div style={{
-                      fontSize: "11px",
-                      color: "#888",
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      marginBottom: "14px",
-                      display: "flex",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}>
-                      <span style={{ color: "var(--color-text-2)" }}>Beta(α,β) ·</span>
-                      <span>{OBJECTIVE_SHORT[obj]}</span>
-                      <span style={{ flexBasis: "100%", color: "var(--color-text-2)", fontFamily: "LetteraMonoLL, monospace", fontSize: "10px" }}>
-                        {OBJECTIVE_LABELS[obj]}
-                      </span>
+                  <div key={obj} className="confidence-panel">
+                    <div className="confidence-objective-heading">
+                      <span>Beta(α,β)</span><span className="confidence-objective-code">{OBJECTIVE_SHORT[obj]}</span>
+                      <span className="confidence-objective-name">{OBJECTIVE_LABELS[obj]}</span>
                     </div>
                     <BanditConfidenceChart
                       banditStates={banditStates}

@@ -1,0 +1,199 @@
+.business-metrics {
+  min-width: 0;
+  font-family: var(--font-mono, "LetteraMonoLL", monospace);
+}
+
+.business-metrics-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 24px;
+}
+
+.business-metrics-filter-label {
+  color: var(--color-text-2);
+  font-size: 12px;
+}
+
+.business-objectives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.business-metrics .business-objective-tab {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.business-metrics .business-objective-tab[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+  color: var(--color-text);
+}
+
+.business-objective-tab:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .business-metrics .business-objective-tab:hover {
+    border-color: var(--color-text-2);
+    color: var(--color-text);
+  }
+}
+
+.business-metrics .business-objective-tab:focus-visible,
+.business-metrics .business-kpi-card:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 4px;
+}
+
+.business-metrics-note {
+  max-width: 80ch;
+  margin-bottom: 24px;
+  color: var(--color-text-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.business-metrics .business-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 36px;
+}
+
+.business-metrics .business-kpi-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 28px 24px;
+}
+
+.business-kpi-card + .business-kpi-card {
+  border-left: 1px solid var(--color-border);
+}
+
+.business-kpi-label {
+  color: var(--color-text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.business-kpi-value {
+  font-family: var(--font-display, "Ndot55", monospace);
+  font-size: 36px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.business-kpi-value-empty {
+  color: var(--color-text-2);
+}
+
+.business-kpi-comparison {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--color-text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.business-kpi-tooltip {
+  position: fixed;
+  z-index: 500;
+  padding: 14px 16px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-2);
+  border-radius: 4px;
+  color: var(--color-text-2);
+  font-size: 11px;
+  line-height: 1.8;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.business-kpi-tooltip-title {
+  margin-bottom: 8px;
+  color: var(--color-text);
+}
+
+.business-kpi-tooltip-comparison {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.business-metrics .business-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 32px;
+}
+
+.business-metrics .business-chart-panel {
+  min-width: 0;
+  padding: 24px 0 28px;
+  border-top: 1px solid var(--color-border);
+}
+
+.business-chart-title {
+  margin-bottom: 20px;
+  color: var(--color-text-2);
+  font-family: var(--font-mono, "LetteraMonoLL", monospace);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+@media (max-width: 1000px) {
+  .business-metrics .business-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .business-kpi-card:nth-child(3) {
+    border-left: 0;
+  }
+  .business-kpi-card:nth-child(n + 3) {
+    border-top: 1px solid var(--color-border);
+  }
+}
+
+@media (max-width: 600px) {
+  .business-metrics .business-kpi-grid,
+  .business-metrics .business-chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .business-metrics .business-kpi-card {
+    padding: 24px 0;
+    border-left: 0;
+  }
+  .business-kpi-card + .business-kpi-card {
+    border-top: 1px solid var(--color-border);
+  }
+  .business-objectives {
+    gap: 6px;
+  }
+  .business-metrics .business-objective-tab {
+    padding-inline: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .business-objective-tab:active {
+    transform: none;
+  }
+}

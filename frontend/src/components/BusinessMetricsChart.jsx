@@ -22,6 +22,7 @@
 import * as d3 from "d3";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAnimatedNumber, useContainerWidth } from "../hooks.js";
+import "./BusinessMetricsChart.css";
 
 const ALL_OBJECTIVES = ["ctr", "roas", "cac"];
 
@@ -47,7 +48,7 @@ const KPIS = [
     format:    fmtRevenue,
     shortFmt:  fmtRevenue,
     higherBetter: true,
-    color:     "#4ADE80",
+    color:     "var(--color-positive)",
   },
   {
     key:       "cac",
@@ -55,7 +56,7 @@ const KPIS = [
     format:    (v) => `$${v.toFixed(2)}`,
     shortFmt:  (v) => `$${v.toFixed(2)}`,
     higherBetter: false,
-    color:     "#22D3EE",
+    color:     "var(--color-info)",
   },
   {
     key:       "roas",
@@ -63,7 +64,7 @@ const KPIS = [
     format:    (v) => `${v.toFixed(2)}×`,
     shortFmt:  (v) => `${v.toFixed(2)}×`,
     higherBetter: true,
-    color:     "#A78BFA",
+    color:     "var(--ch-2)",
   },
   {
     key:       "conversions",
@@ -71,7 +72,7 @@ const KPIS = [
     format:    (v) => v.toFixed(0),
     shortFmt:  (v) => v.toFixed(0),
     higherBetter: true,
-    color:     "#F97316",
+    color:     "var(--color-warning)",
   },
 ];
 
@@ -128,23 +129,14 @@ function useSeries(results, activeObjective) {
 // Shown on day 0 — values at zero, prompts user to simulate.
 function ZeroKpiCard({ kpi }) {
   return (
-    <div className="business-kpi-card" style={{
-      padding: "16px 20px",
-      background: "#111",
-      border: "1px solid #282828",
-      borderRadius: "4px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "8px",
-    }}>
-      <div style={{ fontSize: "10px", color: "#A0A0A0", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+    <div className="business-kpi-card">
+      <div className="business-kpi-label">
         {kpi.label}
       </div>
-      <div style={{ fontFamily: "Ndot55, monospace", fontSize: "22px", color: "#888", lineHeight: 1 }}>
+      <div className="business-kpi-value business-kpi-value-empty">
         {kpi.shortFmt(0)}
       </div>
-      {/* Replaced "0.0% vs static" — avoids "is this broken?" reaction on day 0 */}
-      <div style={{ fontSize: "10px", color: "#A0A0A0" }}>
+      <div className="business-kpi-comparison">
         simulate to populate
       </div>
     </div>
@@ -165,7 +157,7 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
   const rawDelta = kpi.higherBetter ? bv - sv : sv - bv;
   const pctDelta = sv !== 0 ? (rawDelta / Math.abs(sv)) * 100 : 0;
   const isPositive = pctDelta >= 0;
-  const deltaColor = isPositive ? "#4ADE80" : "#FF6666";
+  const deltaColor = isPositive ? "var(--color-positive)" : "var(--color-negative)";
   const deltaStr = `${isPositive ? "+" : ""}${pctDelta.toFixed(1)}%`;
 
   // Animate the primary value smoothly when it changes.
@@ -176,9 +168,11 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
   const showTooltip = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const width = Math.min(280, window.innerWidth - 32);
+    const above = rect.bottom + 240 > window.innerHeight && rect.top >= 240;
     setTooltipPos({
       x: Math.max(16 + width / 2, Math.min(rect.left + rect.width / 2, window.innerWidth - 16 - width / 2)),
-      y: rect.bottom + 200 < window.innerHeight ? rect.bottom + 10 : Math.max(16, rect.top - 190),
+      y: above ? rect.top - 12 : Math.max(16, Math.min(rect.bottom + 12, window.innerHeight - 240)),
+      above,
       width,
     });
   };
@@ -189,17 +183,6 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
       tabIndex={0}
       role="group"
       aria-label={`${kpi.label}: Bandit ${kpi.format(bv)}, static ${kpi.format(sv)}. ${deltaStr} vs static. ${betterLabel}. ${kpi.format(absDiff)} absolute difference.`}
-      style={{
-        padding: "16px 20px",
-        background: "#111",
-        border: `1px solid ${isPositive ? "rgba(74,222,128,0.15)" : "#282828"}`,
-        borderRadius: "4px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px",
-        transition: "border-color 400ms ease",
-        cursor: "default",
-      }}
       onMouseEnter={showTooltip}
       onMouseLeave={() => setTooltipPos(null)}
       onFocus={showTooltip}
@@ -208,62 +191,37 @@ function KpiCard({ kpi, banditSeries, staticSeries }) {
         if (event.key === "Escape") setTooltipPos(null);
       }}
     >
-      <div style={{ fontSize: "10px", color: "#A0A0A0", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+      <div className="business-kpi-label">
         {kpi.label}
       </div>
-      <div style={{
-        fontFamily: "Ndot55, monospace",
-        fontSize: "22px",
-        color: kpi.color,
-        letterSpacing: "0.04em",
-        lineHeight: 1,
-        transition: "color 300ms",
-      }}>
+      <div className="business-kpi-value" style={{ color: kpi.color }}>
         {kpi.shortFmt(animatedBv)}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <span style={{
-          fontFamily: "Ndot55, monospace",
-          fontSize: "13px",
-          color: deltaColor,
-          transition: "color 300ms",
-        }}>
+      <div className="business-kpi-comparison">
+        <span style={{ color: deltaColor }}>
           {deltaStr}
         </span>
-        <span style={{ fontSize: "10px", color: "#A0A0A0" }}>vs static</span>
+        <span>vs static</span>
       </div>
 
       {/* Hover pane — rendered at fixed viewport position to escape card overflow bounds */}
       {tooltipPos && (
-        <div aria-hidden="true" style={{
-          position: "fixed",
+        <div className="business-kpi-tooltip" aria-hidden="true" style={{
           left: `${tooltipPos.x}px`,
           top: `${tooltipPos.y}px`,
-          transform: "translateX(-50%)",
-          zIndex: 500,
-          background: "#161616",
-          border: "1px solid #2A2A2A",
-          borderRadius: "4px",
-          padding: "12px 14px",
+          transform: tooltipPos.above ? "translate(-50%, -100%)" : "translateX(-50%)",
           width: `${tooltipPos.width}px`,
-          fontFamily: "LetteraMonoLL, monospace",
-          fontSize: "10px",
-          lineHeight: "1.8",
-          color: "#C0C0C0",
-          pointerEvents: "none",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-          whiteSpace: "normal",
         }}>
-          <div style={{ color: "#A0A0A0", fontSize: "10px", marginBottom: "8px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          <div className="business-kpi-tooltip-title">
             {kpi.label} · {betterLabel}
           </div>
-          <div><span style={{ color: "#4ADE80" }}>Bandit</span>: {kpi.format(bv)}</div>
-          <div><span style={{ color: "#A0A0A0" }}>Static</span>: {kpi.format(sv)}</div>
-          <div style={{ marginTop: "6px", borderTop: "1px solid #1E1E1E", paddingTop: "6px" }}>
+          <div><span style={{ color: "var(--color-positive)" }}>Bandit</span>: {kpi.format(bv)}</div>
+          <div>Static: {kpi.format(sv)}</div>
+          <div className="business-kpi-tooltip-comparison">
             <span style={{ color: deltaColor }}>{deltaStr}</span>
-            <span style={{ color: "#A0A0A0", marginLeft: "8px" }}>vs static baseline</span>
+            <span> vs static baseline</span>
           </div>
-          <div style={{ color: "#A0A0A0", marginTop: "2px" }}>
+          <div>
             {kpi.format(absDiff)} absolute difference
           </div>
         </div>
@@ -279,8 +237,9 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
 
   useEffect(() => {
     if (!banditSeries.length || !svgRef.current || W === 0) return;
-    const H = 160;
-    const margin = { top: 12, right: 12, bottom: 28, left: 52 };
+    const H = 190;
+    // CAC currency ticks need extra space to preserve the dollar sign on mobile.
+    const margin = { top: 12, right: 12, bottom: 28, left: kpi.key === "cac" ? 72 : 52 };
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
 
@@ -333,7 +292,7 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
     g.append("g")
       .call(d3.axisLeft(yScale).ticks(3).tickSize(-iW).tickFormat(""))
       .call((g) => g.select(".domain").remove())
-      .call((g) => g.selectAll("line").attr("stroke", "#1A1A1A").attr("stroke-dasharray", "2,4"));
+      .call((g) => g.selectAll("line").attr("stroke", "var(--color-surface-2)").attr("stroke-dasharray", "2,4"));
 
     // Area under bandit
     g.append("path")
@@ -348,7 +307,7 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
     // Static line
     g.append("path")
       .attr("fill", "none")
-      .attr("stroke", "#888")
+      .attr("stroke", "var(--color-muted)")
       .attr("stroke-width", 1.5)
       .attr("stroke-dasharray", "4,4")
       .attr("d", lineGen(staticSeries));
@@ -367,18 +326,18 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
         .ticks(Math.min(days.length, 5))
         .tickFormat((d) => `D${d}`)
         .tickSize(3))
-      .call((g) => g.select(".domain").attr("stroke", "#282828"))
-      .call((g) => g.selectAll("text").attr("fill", "#A0A0A0").attr("font-size", "10px").attr("font-family", "LetteraMonoLL, monospace"))
-      .call((g) => g.selectAll("line").attr("stroke", "#282828"));
+      .call((g) => g.select(".domain").attr("stroke", "var(--color-border)"))
+      .call((g) => g.selectAll("text").attr("fill", "var(--color-text-2)").attr("font-size", "11px").attr("font-family", "var(--font-mono)"))
+      .call((g) => g.selectAll("line").attr("stroke", "var(--color-border)"));
 
     g.append("g")
       .call(d3.axisLeft(yScale)
         .ticks(3)
         .tickFormat(kpi.format)
         .tickSize(3))
-      .call((g) => g.select(".domain").attr("stroke", "#282828"))
-      .call((g) => g.selectAll("text").attr("fill", "#A0A0A0").attr("font-size", "10px").attr("font-family", "LetteraMonoLL, monospace"))
-      .call((g) => g.selectAll("line").attr("stroke", "#282828"));
+      .call((g) => g.select(".domain").attr("stroke", "var(--color-border)"))
+      .call((g) => g.selectAll("text").attr("fill", "var(--color-text-2)").attr("font-size", "11px").attr("font-family", "var(--font-mono)"))
+      .call((g) => g.selectAll("line").attr("stroke", "var(--color-border)"));
 
     // -----------------------------------------------------------------------
     // Tooltip + crosshair — follows mouse across the chart.
@@ -388,13 +347,13 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
     // Shooting-star hover dots — positioned on their lines during mousemove.
     const hoverDotBandit = g.append("circle")
       .attr("r", 5).attr("fill", kpi.color)
-      .attr("stroke", "#0D0D0D").attr("stroke-width", 1.5)
+      .attr("stroke", "var(--color-bg)").attr("stroke-width", 1.5)
       .attr("filter", `url(#${glowId})`)
       .attr("opacity", 0).attr("pointer-events", "none");
 
     const hoverDotStatic = g.append("circle")
-      .attr("r", 3.5).attr("fill", "#5A5A5A")
-      .attr("stroke", "#0D0D0D").attr("stroke-width", 1)
+      .attr("r", 3.5).attr("fill", "var(--color-muted)")
+      .attr("stroke", "var(--color-bg)").attr("stroke-width", 1)
       .attr("opacity", 0).attr("pointer-events", "none");
 
     // Reuse a single tooltip div per chart type (data([null]).join avoids duplicates).
@@ -402,13 +361,13 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
     const tooltip = d3.select("body").selectAll(`.${tooltipClass}`).data([null]).join("div")
       .attr("class", tooltipClass)
       .style("position", "fixed")
-      .style("background", "#161616")
-      .style("border", "1px solid #2A2A2A")
+      .style("background", "var(--color-surface-2)")
+      .style("border", "1px solid var(--color-border-2)")
       .style("border-radius", "3px")
       .style("padding", "8px 10px")
       .style("font-size", "11px")
-      .style("font-family", "LetteraMonoLL, monospace")
-      .style("color", "#C0C0C0")
+      .style("font-family", "var(--font-mono)")
+      .style("color", "var(--color-text)")
       .style("pointer-events", "none")
       .style("opacity", 0)
       .style("z-index", 600)
@@ -423,7 +382,7 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
     // Vertical crosshair line — initially invisible, shown on hover.
     const crosshair = g.append("line")
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "#333")
+      .attr("stroke", "var(--color-border-2)")
       .attr("stroke-width", 1)
       .attr("stroke-dasharray", "2,3")
       .attr("opacity", 0)
@@ -450,20 +409,20 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
         const rawDelta = kpi.higherBetter ? bv - sv : sv - bv;
         const pctDelta = sv !== 0 ? (rawDelta / Math.abs(sv)) * 100 : 0;
         const deltaStr = `${pctDelta >= 0 ? "+" : ""}${pctDelta.toFixed(1)}%`;
-        const deltaColor = pctDelta >= 0 ? "#4ADE80" : "#FF6666";
+        const deltaColor = pctDelta >= 0 ? "var(--color-positive)" : "var(--color-negative)";
 
         tooltip
           .style("opacity", 1)
           .style("left", `${event.clientX + 14}px`)
           .style("top",  `${event.clientY - 14}px`)
           .html(
-            `<div style="color:#A0A0A0;font-size:10px;margin-bottom:4px;letter-spacing:0.1em">` +
+            `<div style="color:var(--color-text-2);font-size:11px;margin-bottom:4px">` +
             `DAY ${day} · ${kpi.label.toUpperCase()}</div>` +
-            `<span style="color:#4ADE80">Bandit</span>: ${kpi.format(bv)}<br/>` +
-            `<span style="color:#A0A0A0">Static</span>: ${kpi.format(sv ?? 0)}` +
-            `<div style="margin-top:5px;border-top:1px solid #1E1E1E;padding-top:5px">` +
+            `<span style="color:var(--color-positive)">Bandit</span>: ${kpi.format(bv)}<br/>` +
+            `<span style="color:var(--color-text-2)">Static</span>: ${kpi.format(sv ?? 0)}` +
+            `<div style="margin-top:5px;border-top:1px solid var(--color-border);padding-top:5px">` +
             `<span style="color:${deltaColor}">${deltaStr}</span>` +
-            `<span style="color:#A0A0A0;margin-left:6px">vs static</span></div>`
+            `<span style="color:var(--color-text-2);margin-left:6px">vs static</span></div>`
           );
       })
       .on("mouseleave", () => {
@@ -476,10 +435,10 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
   }, [banditSeries, staticSeries, currentDay, kpi, W]);
 
   return (
-    <div className="business-chart-panel" style={{ background: "#111", border: "1px solid #1E1E1E", borderRadius: "4px", padding: "14px 14px 8px" }}>
-      <div style={{ fontSize: "10px", color: "#A0A0A0", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>
+    <div className="business-chart-panel">
+      <h3 className="business-chart-title">
         {kpi.label}
-      </div>
+      </h3>
       <div ref={containerRef} style={{ width: "100%" }}>
         <svg ref={svgRef} role="img" aria-label={`${kpi.label}, bandit compared with static allocation over time`} style={{ display: "block", width: "100%" }} />
       </div>
@@ -487,8 +446,6 @@ function KpiChart({ kpi, banditSeries, staticSeries, currentDay }) {
   );
 }
 
-// Toggle button for objective filter.
-// Active tab uses red border + red-tinted bg so the selected state is unmistakable.
 function ObjTab({ label, description, active, onClick }) {
   return (
     <button
@@ -497,20 +454,6 @@ function ObjTab({ label, description, active, onClick }) {
       aria-label={description}
       aria-pressed={active}
       onClick={onClick}
-      style={{
-        padding: "10px 12px",
-        borderRadius: "3px",
-        border: `1px solid ${active ? "var(--color-accent)" : "#222"}`,
-        background: active ? "var(--color-accent-tint)" : "transparent",
-        color: active ? "#E0E0E0" : "#A0A0A0",
-        fontSize: "11px",
-        letterSpacing: "0.07em",
-        textTransform: "uppercase",
-        cursor: "pointer",
-        fontFamily: "LetteraMonoLL, monospace",
-        transition: "border-color 180ms ease, background-color 180ms ease",
-        whiteSpace: "nowrap",
-      }}
     >
       {label}
     </button>
@@ -527,41 +470,10 @@ export default function BusinessMetricsChart({ results, currentDay }) {
   const isEmpty = banditSeries.length === 0;
 
   return (
-    <div className="business-metrics" style={{
-      background: "#0F0F0F",
-      border: "1px solid var(--color-border)",
-      borderRadius: "4px",
-    }}>
-      {/* Header: objective toggle tabs */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: "20px",
-        flexWrap: "wrap",
-        gap: "12px",
-      }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-          <span style={{
-            fontSize: "12px",
-            color: "#888",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            fontFamily: "LetteraMonoLL, monospace",
-          }}>
-            {OBJECTIVE_LABELS[activeObjective]}
-          </span>
-          {/* Sub-label confirms the tab click actually did something */}
-          <span style={{
-            fontSize: "10px",
-            color: "#A0A0A0",
-            fontFamily: "LetteraMonoLL, monospace",
-            letterSpacing: "0.06em",
-          }}>
-            Filtering: {activeObjective === "all" ? "all objectives (avg)" : activeObjective.toUpperCase()}
-          </span>
-        </div>
-        <div role="group" aria-label="Filter business metrics by objective" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+    <div className="business-metrics">
+      <div className="business-metrics-filter">
+        <span className="business-metrics-filter-label">Objective</span>
+        <div className="business-objectives" role="group" aria-label="Filter business metrics by objective">
           {["all", "ctr", "roas", "cac"].map((obj) => (
             <ObjTab
               key={obj}
@@ -574,23 +486,11 @@ export default function BusinessMetricsChart({ results, currentDay }) {
         </div>
       </div>
 
-      {/* CTR caveat — filtering by CTR shows click-optimised results, not revenue */}
       {activeObjective === "ctr" && (
-        <div style={{
-          padding:     "8px 12px",
-          marginBottom: "16px",
-          borderLeft:  "2px solid #F97316",
-          background:  "rgba(249,115,22,0.04)",
-          fontSize:    "10px",
-          color:       "#888",
-          lineHeight:  "1.5",
-          fontFamily:  "LetteraMonoLL, monospace",
-          animation:   "fadeIn 300ms ease",
-        }}>
-          <span style={{ color: "#F97316" }}>⚠ You're viewing CTR-objective results.</span>{" "}
-          Maximising click-through rate can attract high-volume but low-quality traffic — wrong audience segments that don't convert.
-          {" "}<span style={{ color: "#A0A0A0" }}>ROAS and CAC tabs show objectives that directly track revenue and acquisition efficiency.</span>
-        </div>
+        <p className="business-metrics-note">
+          Maximising click-through rate can attract high-volume but low-quality traffic: wrong audience segments that don't convert.
+          {" "}ROAS and CAC tabs show objectives that directly track revenue and acquisition efficiency.
+        </p>
       )}
 
       {/* Summary KPI cards — show zeroes on day 0 for realism */}
