@@ -263,25 +263,14 @@ export default function BanditVsStaticChart({ results, objective, shockEvents = 
         .text(label);
     }
 
-    // CAC "lower is better" pill badge — replaces tiny illegible text.
-    // Uses --color-info (cyan) to distinguish from the brand red accent.
     if (isCAC) {
-      const pillG = g.append("g").attr("transform", `translate(2, -${margin.top - 4})`);
-      pillG.append("rect")
-        .attr("x", 0).attr("y", 0)
-        .attr("width", 88).attr("height", 14)
-        .attr("rx", 3)
-        // style() so CSS variables resolve (SVG presentation attrs don't support var())
-        .style("fill", "var(--color-info-dim)")
-        .style("stroke", "var(--color-info)")
-        .attr("stroke-width", 0.5)
-        .attr("stroke-opacity", 0.5);
-      pillG.append("text")
-        .attr("x", 6).attr("y", 10)
-        .style("fill", "var(--color-info)")
-        .attr("font-size", "8px")
+      g.append("text")
+        .attr("x", 0)
+        .attr("y", -8)
+        .style("fill", "var(--color-text-2)")
+        .attr("font-size", "9px")
         .attr("font-family", "LetteraMonoLL, monospace")
-        .text("↓ lower is better");
+        .text("Lower is better");
     }
 
     // Axes

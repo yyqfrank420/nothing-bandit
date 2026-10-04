@@ -62,8 +62,20 @@ function logBeta(a, b) {
   return logGamma(a) + logGamma(b) - logGamma(a + b);
 }
 
+// Simulation posteriors have alpha and beta >= 1, including boundary peaks.
+function posteriorMode(alpha, beta) {
+  if (alpha === 1 && beta === 1) return null;
+  if (alpha === 1) return 0;
+  if (beta === 1) return 1;
+  return (alpha - 1) / (alpha + beta - 2);
+}
+
 export default function BanditConfidenceChart({ banditStates, objective }) {
   const [containerRef, totalW] = useContainerWidth();
+  const cols = totalW >= 420 ? 3 : totalW >= 240 ? 2 : 1;
+  const rows = Math.ceil(CHANNEL_IDS.length / cols);
+  const cellH = 112;
+  const gap = 12;
 
   useEffect(() => {
     // Always clear container first — prevents stale curves persisting after reset.
@@ -78,14 +90,7 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
 
     const container = containerRef.current;
 
-    // 2 rows × 3 cols grid of sparklines
-    const cols = 3;
-    const rows = 2;
-    const cellW = Math.floor(totalW / cols) - 4;
-    const cellH = 70;
-
-    // Remove existing SVGs
-    d3.select(container).selectAll("svg").remove();
+    const cellW = Math.floor((totalW - gap * (cols - 1)) / cols);
 
     CHANNEL_IDS.forEach((chId, idx) => {
       const state = stateMap[chId] ?? { alpha: 1, beta: 1 };
@@ -96,6 +101,8 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
 
       const color = CHANNEL_COLORS[chId];
       const name  = CHANNEL_NAMES[chId];
+      const mode = posteriorMode(alpha, beta);
+      const modeLabel = mode === null ? "Uniform" : `Mode ${Math.round(mode * 100)}%`;
 
       // Compute PDF
       const data = betaPDF(alpha, beta);
@@ -107,11 +114,16 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
         .attr("width", cellW)
         .attr("height", cellH)
         .style("position", "absolute")
-        .style("left", `${col * (cellW + 4)}px`)
-        .style("top", `${row * (cellH + 24)}px`)
-        .style("overflow", "visible");
+        .style("left", `${col * (cellW + gap)}px`)
+        .style("top", `${row * (cellH + gap)}px`)
+        .style("overflow", "hidden")
+        .attr("role", "img");
+      svg.append("title").text(
+        `${name}, ${objective.toUpperCase()} posterior: alpha ${alpha.toFixed(1)}, beta ${beta.toFixed(1)}. ` +
+        (mode === null ? "Uniform distribution with no unique mode." : `${modeLabel}.`)
+      );
 
-      const margin = { top: 18, right: 6, bottom: 6, left: 6 };
+      const margin = { top: 38, right: 6, bottom: 22, left: 6 };
       const iW = cellW - margin.left - margin.right;
       const iH = cellH - margin.top - margin.bottom;
 
@@ -160,32 +172,24 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
         .attr("stroke-width", 1.5)
         .attr("d", lineGen);
 
-      // Channel name label
+      // Labels have separate rows so curve position never affects text placement.
       svg.append("text")
         .attr("x", margin.left)
         .attr("y", 12)
-        .attr("fill", color)
-        .attr("font-size", "9px")
+        .style("fill", color)
+        .attr("font-size", "11px")
         .attr("font-family", "LetteraMonoLL, monospace")
-        .attr("opacity", 0.9)
         .text(name.toUpperCase());
 
-      // α/β values
       svg.append("text")
-        .attr("x", cellW - margin.right)
-        .attr("y", 12)
-        .attr("text-anchor", "end")
-        .attr("fill", "#555")
-        .attr("font-size", "9px")
+        .attr("x", margin.left)
+        .attr("y", 28)
+        .style("fill", "var(--color-text-2)")
+        .attr("font-size", "10px")
         .attr("font-family", "LetteraMonoLL, monospace")
-        .text(`α${alpha.toFixed(0)} β${beta.toFixed(0)}`);
+        .text(`α ${alpha.toFixed(0)}   β ${beta.toFixed(0)}`);
 
-      // Confidence indicator: highlight if this channel is the current leader.
-      // The mode of Beta(α,β) = (α-1)/(α+β-2) for α,β > 1.
-      const mode = alpha > 1 && beta > 1 ? (alpha - 1) / (alpha + beta - 2) : alpha / (alpha + beta);
-
-      // Mode dashed line + "mode XX%" label above it
-      if (alpha > 1) {
+      if (mode !== null) {
         g.append("line")
           .attr("x1", xScale(mode)).attr("x2", xScale(mode))
           .attr("y1", 0).attr("y2", iH)
@@ -193,20 +197,18 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
           .attr("stroke-width", 1)
           .attr("stroke-dasharray", "2,3")
           .attr("opacity", 0.5);
-
-        // Label positioned just above the line — 3px right so it doesn't overlap
-        g.append("text")
-          .attr("x", xScale(mode) + 3)
-          .attr("y", 7)
-          .attr("fill", color)
-          .attr("font-size", "7px")
-          .attr("font-family", "LetteraMonoLL, monospace")
-          .attr("opacity", 0.7)
-          .text(`mode ${Math.round(mode * 100)}%`);
       }
+
+      svg.append("text")
+        .attr("x", margin.left)
+        .attr("y", cellH - 4)
+        .style("fill", "var(--color-text-2)")
+        .attr("font-size", "10px")
+        .attr("font-family", "LetteraMonoLL, monospace")
+        .text(modeLabel);
     });
 
-  }, [banditStates, objective, totalW]);
+  }, [banditStates, objective, totalW, cols]);
 
   return (
     <div
@@ -214,7 +216,7 @@ export default function BanditConfidenceChart({ banditStates, objective }) {
       style={{
         position: "relative",
         width: "100%",
-        height: "188px",   // 2 rows × (70px cell + 24px gap) = 188px
+        height: `${rows * cellH + (rows - 1) * gap}px`,
       }}
     />
   );

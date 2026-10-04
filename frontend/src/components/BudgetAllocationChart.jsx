@@ -246,44 +246,6 @@ export default function BudgetAllocationChart({ results, objective, shockEvents 
         .attr("font-family", "LetteraMonoLL, monospace"))
       .call((g) => g.selectAll("line").attr("stroke", "#282828"));
 
-    // Inline legend — top-right, shows top 3 channels by final-day allocation share.
-    // Helps readers identify dominant channels without needing the global legend.
-    const lastDay = days[days.length - 1];
-    const lastEntry = byDay.get(lastDay) ?? {};
-    const sortedByAlloc = CHANNEL_IDS
-      .map((id) => ({ id, alloc: lastEntry[id] ?? 0 }))
-      .filter((c) => c.alloc > 0.5)
-      .sort((a, b) => b.alloc - a.alloc);
-
-    const legendTop3 = sortedByAlloc.slice(0, 3);
-    const legendExtra = sortedByAlloc.length - 3;
-
-    if (legendTop3.length > 0) {
-      const legendG = g.append("g").attr("transform", `translate(${innerW - 2}, 2)`);
-      legendTop3.forEach(({ id }, i) => {
-        const y = i * 13;
-        legendG.append("circle")
-          .attr("cx", -5).attr("cy", y + 3).attr("r", 3)
-          .attr("fill", CHANNEL_COLORS[id]);
-        legendG.append("text")
-          .attr("x", -10).attr("y", y + 7)
-          .attr("text-anchor", "end")
-          .attr("fill", "#888")
-          .attr("font-size", "8px")
-          .attr("font-family", "LetteraMonoLL, monospace")
-          .text(CHANNEL_NAMES[id]);
-      });
-      if (legendExtra > 0) {
-        legendG.append("text")
-          .attr("x", -10).attr("y", legendTop3.length * 13 + 7)
-          .attr("text-anchor", "end")
-          .attr("fill", "#555")
-          .attr("font-size", "8px")
-          .attr("font-family", "LetteraMonoLL, monospace")
-          .text(`+${legendExtra} more`);
-      }
-    }
-
     // Hit-area rect for the channel breakdown tooltip (separate from shock tooltips above)
     g.append("rect")
       .attr("width", innerW).attr("height", innerH)

@@ -1415,25 +1415,19 @@ export default function App() {
                 marginBottom: "4px",
                 paddingLeft: "2px",
               }}>
-                Bandit Confidence — how certain the bandit is about each channel
+                Bandit Confidence
               </div>
               {/* Interpretation note */}
               <p style={{
                 fontSize: "11px",
+                maxWidth: "75ch",
                 color: "var(--color-text-2)",
                 marginBottom: "16px",
                 paddingLeft: "2px",
                 lineHeight: "1.7",
               }}>
-                Each curve is the Beta(α, β) posterior for one channel under a given objective.
-                A <span style={{ color: "#888" }}>tall narrow peak</span> = high confidence the channel performs well.
-                A <span style={{ color: "#888" }}>flat wide curve</span> = still exploring (few observations).
-                The dashed line marks the distribution mode (most likely true reward rate).
-                Over time, winning channels converge to sharp peaks near 1; losers flatten near 0.
-                {" "}<span style={{ color: "var(--color-text-2)" }}>
-                  The Reward Thresholds in ⚙ Settings control what counts as a win — raising
-                  a threshold makes posteriors flatter and pushes the bandit to explore more.
-                </span>
+                Each curve shows a channel's estimated reward rate. Narrower curves indicate greater certainty.
+                Dashed lines mark the most likely rate. Adjust reward thresholds in Settings.
               </p>
               <div className="confidence-grid" style={{
                 display: "grid",
@@ -1453,13 +1447,14 @@ export default function App() {
                       textTransform: "uppercase",
                       marginBottom: "14px",
                       display: "flex",
+                      flexWrap: "wrap",
                       alignItems: "center",
                       gap: "8px",
                     }}>
                       <span style={{ color: "var(--color-text-2)" }}>Beta(α,β) ·</span>
                       <span>{OBJECTIVE_SHORT[obj]}</span>
-                      <span style={{ color: "var(--color-text-2)", fontFamily: "LetteraMonoLL, monospace", fontSize: "10px" }}>
-                        — {OBJECTIVE_LABELS[obj]}
+                      <span style={{ flexBasis: "100%", color: "var(--color-text-2)", fontFamily: "LetteraMonoLL, monospace", fontSize: "10px" }}>
+                        {OBJECTIVE_LABELS[obj]}
                       </span>
                     </div>
                     <BanditConfidenceChart
